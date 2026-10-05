@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import {
   LayoutDashboard, Plus, ReceiptText, Store, Shield, Settings, HelpCircle,
   Bell, MessageCircle, ChevronDown, WalletCards, ArrowDownToLine, ArrowLeftRight,
-  Send, Hash,
+  Send, Hash, MoreHorizontal,
 } from 'lucide-react';
 import Logo from './Logo';
+import { translations } from '@/lib/i18n';
 
 export type View = 'home' | 'create' | 'merchant' | 'admin' | 'detail' | 'payment' | 'send' | 'deposit' | 'transfer' | 'control';
 
@@ -14,17 +16,29 @@ type HeaderProps = {
 };
 
 export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [language, setLanguage] = useState<'en' | 'sw'>(() => localStorage.getItem('lumo_language') === 'sw' ? 'sw' : 'en');
+  const copy = translations[language];
+  const ENABLE_WALLET_FEATURES = false;
   const navItems: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
-    { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'home', label: copy.dashboard, icon: LayoutDashboard },
+    { id: 'control', label: copy.controlNumbers, icon: Hash },
+    { id: 'create', label: copy.createSplit, icon: Plus },
+    { id: 'detail', label: copy.activeSplits, icon: ReceiptText },
+    { id: 'merchant', label: copy.merchants, icon: Store },
+    { id: 'admin', label: copy.operations, icon: Shield },
+  ];
+  const walletItems: { id: View; label: string; icon: typeof ArrowDownToLine }[] = [
     { id: 'deposit', label: 'Deposit', icon: ArrowDownToLine },
     { id: 'send', label: 'Send', icon: Send },
     { id: 'transfer', label: 'Transfer', icon: ArrowLeftRight },
-    { id: 'control', label: 'Control Numbers', icon: Hash },
-    { id: 'create', label: 'Create Split', icon: Plus },
-    { id: 'detail', label: 'Active Splits', icon: ReceiptText },
-    { id: 'merchant', label: 'Merchants', icon: Store },
-    { id: 'admin', label: 'Operations', icon: Shield },
   ];
+
+  function toggleLanguage() {
+    const next = language === 'en' ? 'sw' : 'en';
+    setLanguage(next);
+    localStorage.setItem('lumo_language', next);
+  }
 
   const isActive = (id: View) => {
     if (id === 'home') return view === 'home';
@@ -57,6 +71,8 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
               </button>
             ))}
           </nav>
+          <button onClick={() => setMoreOpen((open) => !open)} className="mt-5 flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-semibold text-white/65 transition-colors hover:bg-white/10 hover:text-white"><span>{copy.more}</span><ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} /></button>
+          {moreOpen && <div className="mt-1 space-y-1 rounded-lg bg-white/5 p-1">{walletItems.map(({ label, icon: Icon }) => <div key={label} className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold text-white/35"><span className="flex items-center gap-2"><Icon className="h-3.5 w-3.5" /> {label}</span><span className="text-[9px] uppercase tracking-wide">{copy.comingSoon}</span></div>)}</div>}
 
           <p className="px-4 pb-3 pt-9 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">Account</p>
           <nav className="space-y-1">
@@ -96,6 +112,7 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
               <Bell className="h-4 w-4" />
               <span className="absolute right-0 top-0 h-2 w-2 rounded-full border-2 border-white bg-accent-500" />
             </button>
+            <button onClick={toggleLanguage} className="rounded-full border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">{language === 'en' ? 'EN / SW' : 'SW / EN'}</button>
             <button className="hidden items-center gap-2 rounded-full bg-black px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 sm:flex">
               <MessageCircle className="h-4 w-4" /> Chat with support
             </button>
@@ -104,12 +121,9 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-4 py-2 md:hidden">
-          {navItems.slice(0, 5).map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => id === 'create' ? onCreate() : onNavigate(id)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${isActive(id) ? 'bg-primary-50 text-primary-700' : 'text-slate-500'}`}>
-              <Icon className="h-3.5 w-3.5" /> {label}
-            </button>
-          ))}
+        <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-[68px] items-center justify-around border-t border-slate-200 bg-white px-2 shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.35)] md:hidden">
+          {[navItems[0], navItems[2], navItems[3], navItems[4]].map(({ id, label, icon: Icon }) => <button key={id} onClick={() => id === 'create' ? onCreate() : onNavigate(id)} className={`flex min-w-[58px] flex-col items-center gap-1 text-[10px] font-bold ${isActive(id) ? 'text-primary-700' : 'text-slate-400'}`}><Icon className="h-4 w-4" />{id === 'create' ? 'New split' : label}</button>)}
+          {ENABLE_WALLET_FEATURES && <button onClick={() => setMoreOpen((open) => !open)} className="flex min-w-[58px] flex-col items-center gap-1 text-[10px] font-bold text-slate-400"><MoreHorizontal className="h-4 w-4" />More</button>}
         </nav>
       </header>
     </>

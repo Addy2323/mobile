@@ -12,6 +12,9 @@ const splitColors: Record<string, string> = {
   CANCELLED: 'bg-error-50 text-error-700 border-error-200',
   DRAFT: 'bg-slate-100 text-slate-600 border-slate-200',
   DISPUTED: 'bg-error-50 text-error-700 border-error-200',
+  CASH: 'bg-blue-50 text-blue-700 border-blue-200',
+  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
+  FAILED: 'bg-error-50 text-error-700 border-error-200',
 };
 
 const participantColors: Record<string, string> = {
@@ -35,6 +38,9 @@ const splitLabels: Record<string, string> = {
   CANCELLED: 'Cancelled',
   DRAFT: 'Draft',
   DISPUTED: 'Disputed',
+  CASH: 'Cash',
+  PENDING: 'Pending',
+  FAILED: 'Failed',
 };
 
 const participantLabels: Record<string, string> = {
@@ -48,6 +54,7 @@ const participantLabels: Record<string, string> = {
   CANCELLED: 'Cancelled',
   REFUNDED: 'Refunded',
   REVERSED: 'Reversed',
+  CASH: 'Cash',
 };
 
 export default function StatusBadge({ status, type = 'split', size = 'sm' }: StatusBadgeProps) {
@@ -60,7 +67,7 @@ export default function StatusBadge({ status, type = 'split', size = 'sm' }: Sta
 
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border font-semibold ${colorClass} ${sizeClass}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${colorClass.includes('success') ? 'bg-success-500' : colorClass.includes('amber') ? 'bg-amber-500' : colorClass.includes('error') ? 'bg-error-500' : colorClass.includes('primary') ? 'bg-primary-500' : 'bg-slate-400'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${colorClass.includes('success') ? 'bg-success-500' : colorClass.includes('amber') ? 'bg-amber-500' : colorClass.includes('error') ? 'bg-error-500' : colorClass.includes('primary') ? 'bg-primary-500' : colorClass.includes('blue') ? 'bg-blue-500' : 'bg-slate-400'}`} />
       {label}
     </span>
   );

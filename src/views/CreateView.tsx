@@ -5,6 +5,7 @@ import {
   Hotel, UtensilsCrossed, Plane, Calendar as CalIcon, ShoppingBag, Home, Receipt,
 } from 'lucide-react';
 import { supabase, type Merchant, type Split } from '@/lib/supabase';
+import TrustStrip from '@/components/TrustStrip';
 import { formatMoney, formatDateTime } from '@/lib/utils';
 import { CategoryIcon } from '@/components/CategoryIcon';
 
@@ -654,6 +655,8 @@ function SuccessView({ split, merchant, onComplete }: { split: Split; merchant: 
           <span className="font-medium text-slate-900">{split.participant_count} people</span>
         </div>
       </div>
+
+      <div className="mb-6"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
 
       <div className="p-4 rounded-xl bg-primary-50 border border-primary-100 mb-6">
         <div className="flex items-center gap-2 mb-1.5">

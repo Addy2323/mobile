@@ -59,7 +59,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
         <section className="rounded-[22px] bg-black p-5 text-white shadow-[0_14px_30px_-18px_rgba(0,0,0,0.45)] sm:p-7">
           <div className="flex items-start justify-between gap-5">
             <div>
-              <p className="mb-3 text-sm font-medium text-white/70">Settlement overview</p>
+              <p className="mb-1 text-sm font-medium text-white/70">Confirmed contributions</p><p className="mb-3 text-xs text-white/45">Recorded payments, not a wallet balance</p>
               <div className="flex items-center gap-3">
                 <p className="text-2xl font-extrabold tracking-tight sm:text-3xl">
                   {hidden ? 'TZS •••••••' : formatMoney(totalCollected)}
@@ -68,7 +68,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
                   {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-white/45">Confirmed contributions across {splits.length} split bills</p>
+              <p className="mt-2 text-xs text-white/45">Confirmed payments across {splits.length} split bills</p>
             </div>
             <button className="flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-900">TZS <ChevronRight className="h-3.5 w-3.5 rotate-90" /></button>
           </div>
@@ -113,7 +113,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
             <div className="space-y-2.5">
               <SummaryRow icon={ReceiptText} label="Total split bills" value={splits.length.toString()} />
               <SummaryRow icon={Clock3} label="Awaiting payment" value={pending.toString()} />
-              <SummaryRow icon={Users} label="People invited" value={splits.reduce((sum, split) => sum + split.participant_count, 0).toString()} />
+              <SummaryRow icon={Users} label="People total" value={splits.reduce((sum, split) => sum + split.participant_count, 0).toString()} />
               <SummaryRow icon={CircleDollarSign} label="Total bill value" value={formatMoney(totalVolume)} />
             </div>
             <div className="mt-5 rounded-xl bg-slate-50 p-4"><div className="mb-2 flex justify-between"><span className="text-xs font-semibold text-slate-500">Overall collection</span><span className="text-xs font-bold text-slate-900">{totalVolume ? Math.round((totalCollected / totalVolume) * 100) : 0}%</span></div><ProgressBar percent={totalVolume ? Math.round((totalCollected / totalVolume) * 100) : 0} size="sm" /></div>
@@ -126,7 +126,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
 }
 
 function SplitRow({ split, onClick }: { split: Split & { merchant?: Merchant | null }; onClick: () => void }) {
-  return <button onClick={onClick} className="group flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-slate-200 hover:bg-slate-50"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><CategoryIcon category={split.category} className="h-4.5 w-4.5 text-slate-600" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold text-slate-900">{split.title}</p><StatusBadge status={split.status} /></div><p className="mt-1 truncate text-xs text-slate-400">{split.merchant?.display_name || 'Verified destination'} · {split.participant_count} people · {timeAgo(split.created_at)}</p><div className="mt-2 max-w-[220px]"><ProgressBar percent={split.settlement_percent} size="sm" /></div></div><div className="text-right"><p className="text-sm font-extrabold text-slate-900">{formatMoney(split.total_amount)}</p><p className="mt-1 text-[11px] font-semibold text-success-600">{formatMoney(split.amount_paid)} paid</p></div><ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-600" /></button>;
+  return <button onClick={onClick} className="group flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-slate-200 hover:bg-slate-50"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><CategoryIcon category={split.category} className="h-4.5 w-4.5 text-slate-600" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold text-slate-900">{split.title}</p><StatusBadge status={split.status} /></div><p className="mt-1 truncate text-xs text-slate-400">{split.merchant?.display_name || 'Verified destination'} · {split.participant_count} people total · {timeAgo(split.created_at)}</p><div className="mt-2 max-w-[220px]"><ProgressBar percent={split.settlement_percent} size="sm" /></div></div><div className="text-right"><p className="text-sm font-extrabold text-slate-900">{formatMoney(split.total_amount)}</p><p className="mt-1 text-[11px] font-semibold text-success-600">{formatMoney(split.amount_paid)} paid</p></div><ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-600" /></button>;
 }
 
 function SummaryRow({ icon: Icon, label, value }: { icon: typeof ReceiptText; label: string; value: string }) {

@@ -10,6 +10,7 @@ import StatusBadge from '@/components/StatusBadge';
 import ProgressBar from '@/components/ProgressBar';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import Modal from '@/components/Modal';
+import TrustStrip from '@/components/TrustStrip';
 
 type SplitDetailViewProps = {
   split: Split;
@@ -210,6 +211,8 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
           </div>
         )}
       </div>
+
+      <div className="mb-5"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
 
       {/* Participants */}
       <div className="bg-white rounded-2xl border border-slate-100 p-6 mb-5">

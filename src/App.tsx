@@ -59,7 +59,7 @@ export default function App() {
         <Header view={view} onNavigate={navigateTo} onCreate={handleCreate} />
       )}
 
-      <main className={view === 'payment' ? '' : 'md:ml-[258px]'}>
+      <main className={`${view === 'payment' ? '' : 'md:ml-[258px]'} pb-16 md:pb-0`}>
         {view === 'home' && (
           <HomeView onSplitClick={handleSplitClick} onCreate={handleCreate} />
         )}

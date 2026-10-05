@@ -8,6 +8,7 @@ import { formatMoney, formatDateTime } from '@/lib/utils';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import StatusBadge from '@/components/StatusBadge';
 import Logo from '@/components/Logo';
+import TrustStrip from '@/components/TrustStrip';
 
 type PaymentViewProps = {
   split: Split;
@@ -117,7 +118,8 @@ export default function PaymentView({ split, participant: initialParticipant, on
           <p className="text-slate-500">Your contribution has been recorded and the organizer has been notified.</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-4 mb-5">
+        <TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} />
+        <div className="mt-5 bg-white rounded-2xl border border-slate-100 p-6 space-y-4 mb-5">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <span className="text-sm text-slate-500">Amount Paid</span>
             <span className="text-xl font-extrabold text-success-600">{formatMoney(participant.allocation_amount)}</span>
@@ -210,6 +212,8 @@ export default function PaymentView({ split, participant: initialParticipant, on
           </div>
         </div>
       </div>
+
+      <div className="mb-5"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
 
       {/* Payment method */}
       <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-5">
