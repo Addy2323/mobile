@@ -275,7 +275,7 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
           </p>
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
             <p className="font-mono text-sm text-slate-700 break-all">
-              lumo-split.app/pay/{split.ref_code}
+              /s/{split.ref_code}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">

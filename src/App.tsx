@@ -8,13 +8,24 @@ import MerchantView from '@/views/MerchantView';
 import AdminView from '@/views/AdminView';
 import LoginView from '@/views/LoginView';
 import MoneyFlowView, { type MoneyFlowMode } from '@/views/MoneyFlowView';
+import FriendPaymentView from '@/views/FriendPaymentView';
 import type { Split, Participant } from '@/lib/supabase';
 
+function getPublicToken(): string | null {
+  const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9]+)/);
+  return match ? match[1] : null;
+}
+
 export default function App() {
+  const publicToken = getPublicToken();
   const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('lumo_authenticated') === 'true');
   const [view, setView] = useState<View>('home');
   const [activeSplit, setActiveSplit] = useState<Split | null>(null);
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
+
+  if (publicToken) {
+    return <FriendPaymentView token={publicToken} />;
+  }
 
   function navigateTo(v: View) {
     setView(v);
