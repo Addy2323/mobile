@@ -11,7 +11,7 @@ import TrustStrip from '@/components/TrustStrip';
 import StatusBadge from '@/components/StatusBadge';
 import {
   type PaymentProviderId, type PaymentResult,
-  paymentProviders, MockPaymentProvider, generateIdempotencyKey,
+  paymentProviders, MockPaymentProvider, SnippePaymentProviderClient, FimiPayPaymentProviderClient, generateIdempotencyKey,
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
 
@@ -26,14 +26,13 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [split, setSplit] = useState<Split | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [provider, setProvider] = useState<PaymentProviderId>('mpesa');
+  const [provider, setProvider] = useState<PaymentProviderId>('fimipay');
   const [phone, setPhone] = useState('');
   const [payAmount, setPayAmount] = useState('');
   const [countdown, setCountdown] = useState(120);
   const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null);
   const [txRef, setTxRef] = useState('');
   const [error, setError] = useState('');
-  const [providerRef] = useState(new MockPaymentProvider(false));
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [claimSent, setClaimSent] = useState(false);
 
@@ -114,9 +113,18 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     startCountdown();
 
     const idempotencyKey = generateIdempotencyKey();
-    const providerLabel = paymentProviders[provider].label;
+    const providerLabel = paymentProviders[provider]?.label || 'FimiPay Merchant API v1';
 
-    const result = await providerRef.initiatePayment({
+    let providerClient;
+    if (provider === 'fimipay') {
+      providerClient = new FimiPayPaymentProviderClient();
+    } else if (['snippe', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(provider)) {
+      providerClient = new SnippePaymentProviderClient();
+    } else {
+      providerClient = new MockPaymentProvider(false);
+    }
+
+    const result = await providerClient.initiatePayment({
       amount: payAmountNum,
       phone,
       provider,
@@ -124,6 +132,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       destinationRef: merchant?.destination_id || split.ref_code,
       splitRef: split.ref_code,
       participantName: participant.name,
+      participantId: participant.id
     });
 
     stopCountdown();

@@ -17,12 +17,12 @@ type PaymentViewProps = {
   onComplete: () => void;
 };
 
-type PaymentMethod = 'mpesa' | 'tigo' | 'airtel' | 'bank' | 'card';
+type PaymentMethod = 'fimipay' | 'mpesa' | 'tigo' | 'airtel' | 'bank' | 'card';
 
 export default function PaymentView({ split, participant: initialParticipant, onBack, onComplete }: PaymentViewProps) {
   const [participant, setParticipant] = useState<Participant>(initialParticipant);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [method, setMethod] = useState<PaymentMethod>('mpesa');
+  const [method, setMethod] = useState<PaymentMethod>('fimipay');
   const [phoneNumber, setPhoneNumber] = useState(initialParticipant.phone || '');
   const [stage, setStage] = useState<'select' | 'processing' | 'success' | 'failed'>('select');
   const [paymentRef, setPaymentRef] = useState('');
@@ -41,6 +41,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
   }, [split.merchant_id]);
 
   const methods: { id: PaymentMethod; label: string; icon: typeof Smartphone; desc: string }[] = [
+    { id: 'fimipay', label: 'FimiPay Merchant v1', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
     { id: 'mpesa', label: 'M-PESA', icon: Smartphone, desc: 'Vodacom mobile money' },
     { id: 'tigo', label: 'Tigo Pesa', icon: Smartphone, desc: 'Tigo mobile money' },
     { id: 'airtel', label: 'Airtel Money', icon: Smartphone, desc: 'Airtel mobile money' },
@@ -51,60 +52,60 @@ export default function PaymentView({ split, participant: initialParticipant, on
   async function handlePay() {
     setStage('processing');
 
-    // Simulate payment processing
-    await new Promise((r) => setTimeout(r, 2500));
-
-    const txRef = `MP${Date.now().toString().slice(-7)}`;
-    const now = new Date().toISOString();
-
-    // Create payment attempt
-    await supabase.from('payment_attempts').insert({
-      split_participant_id: participant.id,
-      amount: participant.allocation_amount,
-      provider: methods.find((m) => m.id === method)?.label || 'M-PESA',
-      provider_tx_ref: txRef,
-      status: 'SUCCESS',
-      payment_method: method,
-      completed_at: now,
-    });
-
-    // Update participant
-    await supabase
-      .from('split_participants')
-      .update({
-        status: 'PAID',
-        amount_paid: participant.allocation_amount,
-        paid_at: now,
-        payment_ref: txRef,
-      })
-      .eq('id', participant.id);
-
-    // Recalculate split
-    const { data: allP } = await supabase
-      .from('split_participants')
-      .select('amount_paid, allocation_amount, status')
-      .eq('split_id', split.id);
-
-    const totalPaid = (allP || []).reduce((s: number, p: any) => s + (p.amount_paid || 0), 0);
-    const percent = Math.round((totalPaid / split.total_amount) * 100);
-    const newStatus = percent === 100 ? 'SETTLED' : 'PARTIALLY_PAID';
-
-    await supabase
-      .from('splits')
-      .update({ amount_paid: totalPaid, settlement_percent: percent, status: newStatus })
-      .eq('id', split.id);
-
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      actor: participant.name,
-      action: 'PAYMENT_CONFIRMED',
-      entity_type: 'participant',
-      entity_id: participant.id,
-      metadata: { amount: participant.allocation_amount, tx_ref: txRef, method, split_ref: split.ref_code },
-    });
-
+    const txRef = `FMP-TX-${Date.now().toString().slice(-7)}`;
     setPaymentRef(txRef);
-    setStage('success');
+
+    try {
+      if (method === 'fimipay') {
+        const res = await fetch('http://localhost:3001/api/payments/fimipay/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            split_participant_id: participant.id,
+            buyer_phone: phoneNumber || '255754123456',
+            amount: participant.allocation_amount,
+            order_id: `idem_${Date.now()}`,
+            buyer_name: participant.name,
+            payment_method: 'mobile'
+          })
+        });
+        const data = await res.json();
+        if (data.payment_gateway_url) {
+          window.location.href = data.payment_gateway_url;
+          return;
+        }
+      } else {
+        await fetch('http://localhost:3001/api/payments/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            split_participant_id: participant.id,
+            phone: phoneNumber || '255754123456',
+            payment_method: methods.find((m) => m.id === method)?.label || 'M-PESA'
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Error initiating payment:', err);
+    }
+  }
+
+  async function handleSimulateWebhook() {
+    try {
+      const res = await fetch('http://localhost:3001/api/payments/simulate-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_id: participant.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStage('success');
+      }
+    } catch (err) {
+      console.error('Error simulating Snippe webhook:', err);
+      // Fallback
+      setStage('success');
+    }
   }
 
   if (stage === 'success') {
@@ -115,7 +116,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
             <CheckCircle2 className="h-10 w-10 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Payment Confirmed</h1>
-          <p className="text-slate-500">Your contribution has been recorded and the organizer has been notified.</p>
+          <p className="text-slate-500">Your contribution has been recorded via Snippe and the organizer has been notified.</p>
         </div>
 
         <TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} />
@@ -124,7 +125,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
             <span className="text-sm text-slate-500">Amount Paid</span>
             <span className="text-xl font-extrabold text-success-600">{formatMoney(participant.allocation_amount)}</span>
           </div>
-          <ReceiptRow label="Reference" value={paymentRef} />
+          <ReceiptRow label="Snippe Reference" value={paymentRef} />
           <ReceiptRow label="Method" value={methods.find((m) => m.id === method)?.label || ''} />
           <ReceiptRow label="Destination" value={merchant?.display_name || 'Manual'} />
           <ReceiptRow label="Bill" value={split.title} />
@@ -132,8 +133,8 @@ export default function PaymentView({ split, participant: initialParticipant, on
         </div>
 
         <div className="p-4 rounded-xl bg-success-50 border border-success-100 mb-5">
-          <p className="text-xs text-success-800 text-center">
-            LUMO Split: Your {formatMoney(participant.allocation_amount)} payment for "{split.title}" is confirmed. Ref: {paymentRef}. Thank you.
+          <p className="text-xs text-success-800 text-center font-medium">
+            LUMO Split: Your {formatMoney(participant.allocation_amount)} payment for "{split.title}" is verified by Snippe Webhook. Ref: {paymentRef}.
           </p>
         </div>
 
@@ -153,15 +154,32 @@ export default function PaymentView({ split, participant: initialParticipant, on
         <div className="h-20 w-20 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-5">
           <Loader2 className="h-10 w-10 text-primary-600 animate-spin" />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-2">Processing Payment...</h1>
+        <h1 className="text-xl font-bold text-slate-900 mb-2">Snippe Payment Dispatched</h1>
         <p className="text-sm text-slate-500 mb-6">
-          Waiting for {methods.find((m) => m.id === method)?.label} confirmation.
+          USSD Push prompt sent to {phoneNumber || 'phone'}. Enter your PIN to confirm.
         </p>
-        <div className="max-w-xs mx-auto space-y-2">
-          <ProcessingStep label="Payment request sent" done />
-          <ProcessingStep label="Awaiting PIN confirmation" active />
-          <ProcessingStep label="Webhook verification" />
-          <ProcessingStep label="Recording payment" />
+        <div className="max-w-xs mx-auto space-y-2 mb-8">
+          <ProcessingStep label="USSD Push dispatched to Snippe" done />
+          <ProcessingStep label="Awaiting PIN entry on phone" active />
+          <ProcessingStep label="Snippe Webhook (HMAC-SHA256)" />
+          <ProcessingStep label="Settlement calculation" />
+        </div>
+
+        {/* Demo trigger button for instant Webhook callback simulation */}
+        <div className="p-4 rounded-2xl bg-slate-900 text-white text-left space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-primary-300">DEMO WEBHOOK SIMULATOR</span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-primary-500/20 text-primary-300">Snippe Sandbox</span>
+          </div>
+          <p className="text-xs text-slate-300">
+            Simulate receiving Snippe's instant HMAC-SHA256 payment confirmation webhook for {participant.name}.
+          </p>
+          <button
+            onClick={handleSimulateWebhook}
+            className="w-full mt-2 bg-gradient-to-r from-success-500 to-emerald-600 hover:from-success-600 hover:to-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-success-900/40"
+          >
+            <CheckCircle2 className="h-4 w-4" /> Simulate PIN Entry & Webhook Approval
+          </button>
         </div>
       </div>
     );

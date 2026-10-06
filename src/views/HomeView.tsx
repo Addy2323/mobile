@@ -9,6 +9,7 @@ import { formatMoney, timeAgo } from '@/lib/utils';
 import StatusBadge from '@/components/StatusBadge';
 import ProgressBar from '@/components/ProgressBar';
 import { CategoryIcon } from '@/components/CategoryIcon';
+import RewardsWidget from '@/components/RewardsWidget';
 
 type HomeViewProps = {
   onSplitClick: (split: Split) => void;
@@ -28,7 +29,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
       if (data) setSplits(data as (Split & { merchant: Merchant })[]);
       setLoading(false);
     }
-    loadSplits();
+    void loadSplits();
   }, []);
 
   const totalVolume = useMemo(() => splits.reduce((sum, split) => sum + split.total_amount, 0), [splits]);
@@ -80,7 +81,7 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
             <button onClick={() => document.getElementById('recent-splits')?.scrollIntoView({ behavior: 'smooth' })} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-slate-950 transition hover:bg-slate-100">
               <ArrowDownToLine className="h-4 w-4" /> Collect a share
             </button>
-            <button onClick={() => setShowAll((value) => !value)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#e5e5e5] text-sm font-semibold text-slate-950 transition hover:bg-white sm:col-span-2">
+            <button onClick={() => setShowAll((value) => !value)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#e5e5e5] text-sm font-semibold text-slate-950 transition hover:bg-slate-100 sm:col-span-2">
               <ArrowLeftRight className="h-4 w-4" /> {showAll ? 'Hide extra splits' : 'View all split activity'}
             </button>
           </div>
@@ -98,6 +99,10 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
           </div>
           <div className="hidden items-center gap-2 sm:flex"><span className="h-2 w-2 rounded-full bg-success-500" /><span className="text-xs font-semibold text-slate-500">All systems operational</span></div>
         </section>
+
+        <div className="mt-6">
+          <RewardsWidget />
+        </div>
 
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1.45fr_0.85fr]">
           <section id="recent-splits" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

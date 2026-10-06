@@ -1,0 +1,21 @@
+{
+  "name": "LUMO Split — Group Bills, Settled",
+  "short_name": "LUMO Split",
+  "description": "Split bills, share the moment, and track payments instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

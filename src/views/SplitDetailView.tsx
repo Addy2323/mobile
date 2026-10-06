@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle, ArrowLeft, Ban, Bell, Building2, Calendar, Check, CheckCircle2,
   Clock, Copy, Download, Heart, Loader2, MoreHorizontal, PartyPopper, Pencil,
-  Plus, Receipt, RefreshCw, Send, Share2, ShieldAlert, StickyNote, Trash2,
+  Plus, Receipt, RefreshCw, Send, Share2, ShieldAlert, Sparkles, StickyNote, Trash2,
   TrendingUp, Users, X,
 } from 'lucide-react';
 import { supabase, type Split, type Participant, type Merchant, type PaymentAttempt } from '@/lib/supabase';
@@ -73,7 +73,7 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
       if (m) setMerchant(m as Merchant);
     }
 
-    const participantIds = (p || []).map((pp) => pp.id);
+    const participantIds = (p || []).map((pp: Participant) => pp.id);
     if (participantIds.length > 0) {
       const { data: pays } = await supabase
         .from('payment_attempts')
@@ -270,13 +270,24 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
 
         {/* Settled banner */}
         {isSettled && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-success-200 bg-gradient-to-r from-success-50 to-success-50/50 p-4">
-            <PartyPopper className="h-6 w-6 text-success-600" />
-            <div className="flex-1">
-              <p className="text-sm font-extrabold text-success-800">Bill fully settled</p>
-              <p className="text-xs text-success-700">All {participants.length} participants have paid. {formatMoney(split.total_amount)} collected.</p>
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-success-200 bg-gradient-to-r from-success-50 via-success-100/40 to-white p-5 sm:flex-row sm:items-center sm:justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success-500 text-white shadow-md">
+                <PartyPopper className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="flex items-center gap-1.5 text-base font-extrabold text-success-900"><Sparkles className="h-4 w-4 text-success-600 shrink-0" /> SPLIT SETTLED 100%</p>
+                <p className="text-xs font-semibold text-success-700">All {participants.length} participants have paid! {formatMoney(split.total_amount)} collected successfully.</p>
+              </div>
             </div>
-            <button onClick={() => setActionModal({ kind: 'thankyou' })} className="flex items-center gap-1.5 rounded-lg bg-success-600 px-3 py-2 text-xs font-bold text-white hover:bg-success-700"><Heart className="h-3.5 w-3.5" /> Send thank-you</button>
+            <div className="flex flex-wrap items-center gap-2 border-t border-success-200/60 pt-3 sm:border-t-0 sm:pt-0">
+              <button onClick={() => setActionModal({ kind: 'thankyou' })} className="flex items-center gap-1.5 rounded-xl bg-white border border-success-300 px-3 py-2 text-xs font-bold text-success-800 hover:bg-success-50 transition">
+                <Heart className="h-3.5 w-3.5 text-success-600" /> Send Thank-You
+              </button>
+              <button onClick={onBack} className="flex items-center gap-1.5 rounded-xl bg-success-600 px-4 py-2 text-xs font-bold text-white hover:bg-success-700 shadow-sm transition">
+                <Plus className="h-3.5 w-3.5" /> Create another like this
+              </button>
+            </div>
           </div>
         )}
 

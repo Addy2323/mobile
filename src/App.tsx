@@ -11,6 +11,13 @@ import MoneyFlowView, { type MoneyFlowMode } from '@/views/MoneyFlowView';
 import FriendPaymentView from '@/views/FriendPaymentView';
 import type { Split, Participant } from '@/lib/supabase';
 
+import ActivityView from '@/views/ActivityView';
+import SettingsView from '@/views/SettingsView';
+import ControlNumberView from '@/views/ControlNumberView';
+
+import { LayoutSwitch } from '@/mobile/components/LayoutSwitch';
+import { MobileShell } from '@/mobile/components/MobileShell';
+
 function getPublicToken(): string | null {
   const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9]+)/);
   return match ? match[1] : null;
@@ -24,7 +31,11 @@ export default function App() {
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
 
   if (publicToken) {
-    return <FriendPaymentView token={publicToken} />;
+    return (
+      <LayoutSwitch mobileView={<MobileShell />}>
+        <FriendPaymentView token={publicToken} />
+      </LayoutSwitch>
+    );
   }
 
   function navigateTo(v: View) {
@@ -65,59 +76,77 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {view !== 'payment' && (
-        <Header view={view} onNavigate={navigateTo} onCreate={handleCreate} />
-      )}
-
-      <main className={`${view === 'payment' ? '' : 'md:ml-[258px]'} pb-16 md:pb-0`}>
-        {view === 'home' && (
-          <HomeView onSplitClick={handleSplitClick} onCreate={handleCreate} />
+    <LayoutSwitch mobileView={<MobileShell />}>
+      <div className="min-h-screen bg-slate-50">
+        {view !== 'payment' && (
+          <Header view={view} onNavigate={navigateTo} onCreate={handleCreate} />
         )}
 
-        {view === 'create' && (
-          <CreateView
-            onComplete={handleCreateComplete}
-            onCancel={() => setView('home')}
-          />
-        )}
+        <main className={`${view === 'payment' ? '' : 'md:ml-[258px]'} pb-16 md:pb-0`}>
+          {view === 'home' && (
+            <HomeView onSplitClick={handleSplitClick} onCreate={handleCreate} />
+          )}
 
-        {view === 'detail' && activeSplit && (
-          <SplitDetailView
-            split={activeSplit}
-            onBack={() => setView('home')}
-            onPay={handlePay}
-          />
-        )}
+          {view === 'activity' && (
+            <ActivityView onSelectSplit={handleSplitClick} onBack={() => setView('home')} />
+          )}
 
-        {view === 'payment' && activeSplit && activeParticipant && (
-          <PaymentView
-            split={activeSplit}
-            participant={activeParticipant}
-            onBack={() => setView('detail')}
-            onComplete={handlePaymentComplete}
-          />
-        )}
+          {view === 'settings' && <SettingsView />}
 
-        {view === 'merchant' && <MerchantView />}
+          {view === 'control' && (
+            <ControlNumberView
+              onSplitBill={(biller, amount, ref) => {
+                setView('create');
+              }}
+              onBack={() => setView('home')}
+            />
+          )}
 
-        {view === 'admin' && <AdminView />}
+          {view === 'create' && (
+            <CreateView
+              onComplete={handleCreateComplete}
+              onCancel={() => setView('home')}
+            />
+          )}
 
-        {(['send', 'deposit', 'transfer', 'control'] as const).includes(view as MoneyFlowMode) && (
-          <MoneyFlowView mode={view as MoneyFlowMode} onBack={() => setView('home')} />
-        )}
-      </main>
+          {view === 'detail' && activeSplit && (
+            <SplitDetailView
+              split={activeSplit}
+              onBack={() => setView('home')}
+              onPay={handlePay}
+            />
+          )}
 
-      {view !== 'payment' && (
-        <footer className="border-t border-slate-200 mt-12 py-6 md:ml-[258px]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-              <p>LUMO Split coordinates split obligations. Regulated payment providers execute payments.</p>
-              <p>Tanzania-first · Mobile-money & bank payment ecosystem</p>
+          {view === 'payment' && activeSplit && activeParticipant && (
+            <PaymentView
+              split={activeSplit}
+              participant={activeParticipant}
+              onBack={() => setView('detail')}
+              onComplete={handlePaymentComplete}
+            />
+          )}
+
+          {view === 'merchant' && <MerchantView />}
+
+          {view === 'admin' && <AdminView />}
+
+          {(['send', 'deposit', 'transfer'] as const).includes(view as any) && (
+            <MoneyFlowView mode={view as MoneyFlowMode} onBack={() => setView('home')} />
+          )}
+        </main>
+
+        {view !== 'payment' && (
+          <footer className="border-t border-slate-200 mt-12 py-6 md:ml-[258px]">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+                <p>LUMO Split coordinates split obligations. Regulated payment providers execute payments.</p>
+                <p>Tanzania-first · Mobile-money & bank payment ecosystem</p>
+              </div>
             </div>
-          </div>
-        </footer>
-      )}
-    </div>
+          </footer>
+        )}
+      </div>
+    </LayoutSwitch>
   );
 }
+

@@ -5,6 +5,28 @@
 @tailwind utilities;
 
 :root {
+  --primary: #12285C;
+  --primary-pressed: #0B1B40;
+  --accent: #3B6FF5;
+  --tint: #EAF0FF;
+  --ink: #0F172A;
+  --muted: #64748B;
+  --bg: #F4F6FB;
+  --card: #FFFFFF;
+  --border: #E2E8F0;
+
+  /* Status Colors */
+  --status-paid-bg: #DCFCE7;
+  --status-paid-text: #15803D;
+  --status-pending-bg: #FEF3C7;
+  --status-pending-text: #B45309;
+  --status-failed-bg: #FEE2E2;
+  --status-failed-text: #B91C1C;
+  --status-expired-bg: #F1F5F9;
+  --status-expired-text: #475569;
+  --status-cash-bg: #E0F2FE;
+  --status-cash-text: #0369A1;
+
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -12,7 +34,7 @@
 
 body {
   margin: 0;
-  background-color: #f8fafc;
+  background-color: var(--bg);
 }
 
 /* Custom scrollbar */
@@ -72,3 +94,51 @@ body {
   border-radius: 12px;
   background: repeating-linear-gradient(45deg, #fff, #fff 5px, #f1f5f9 5px, #f1f5f9 8px);
 }
+
+/* Mobile Layout Utilities & Safe Areas */
+.h-dvh {
+  height: 100dvh;
+}
+.min-h-dvh {
+  min-height: 100dvh;
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobile chrome tap highlight disable */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Bottom Sheet Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Hide scrollbars for clean mobile horizontal lists */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
