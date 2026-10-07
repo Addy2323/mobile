@@ -67,6 +67,10 @@ export default function PaymentView({ split, participant: initialParticipant, on
   }, [stage, participant.id]);
 
   async function handlePay() {
+    if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 9) {
+      window.alert('Enter a valid phone number.');
+      return;
+    }
     setStage('processing');
 
     const txRef = `FMP-TX-${Date.now().toString().slice(-7)}`;
@@ -79,7 +83,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             split_participant_id: participant.id,
-            buyer_phone: phoneNumber || '255754123456',
+            buyer_phone: phoneNumber,
             amount: participant.allocation_amount,
             order_id: `idem_${Date.now()}`,
             buyer_name: participant.name,
@@ -114,7 +118,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
             <span className="text-sm text-slate-500">Amount Paid</span>
             <span className="text-xl font-extrabold text-success-600">{formatMoney(participant.allocation_amount)}</span>
           </div>
-          <ReceiptRow label="Snippe Reference" value={paymentRef} />
+          <ReceiptRow label="Payment Reference" value={paymentRef} />
           <ReceiptRow label="Method" value={methods.find((m) => m.id === method)?.label || ''} />
           <ReceiptRow label="Destination" value={merchant?.display_name || 'Manual'} />
           <ReceiptRow label="Bill" value={split.title} />
@@ -123,7 +127,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
 
         <div className="p-4 rounded-xl bg-success-50 border border-success-100 mb-5">
           <p className="text-xs text-success-800 text-center font-medium">
-            LUMO Split: Your {formatMoney(participant.allocation_amount)} payment for "{split.title}" is verified by Snippe Webhook. Ref: {paymentRef}.
+            LUMO Split: Your {formatMoney(participant.allocation_amount)} payment for "{split.title}" is confirmed. Ref: {paymentRef}.
           </p>
         </div>
 
@@ -143,7 +147,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
         <div className="h-20 w-20 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-5">
           <Loader2 className="h-10 w-10 text-primary-600 animate-spin" />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-2">Snippe Payment Dispatched</h1>
+        <h1 className="text-xl font-bold text-slate-900 mb-2">Payment Request Sent</h1>
         <p className="text-sm text-slate-500 mb-6">
           USSD Push prompt sent to {phoneNumber || 'phone'}. Enter your PIN to confirm.
         </p>
@@ -243,7 +247,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
       </div>
 
       {/* Phone input for mobile money */}
-      {(method === 'mpesa' || method === 'tigo' || method === 'airtel') && (
+      {method === 'fimipay' && (
         <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-5">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             {methods.find((m) => m.id === method)?.label} Phone Number
