@@ -138,58 +138,10 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       participantId: participant.id
     });
 
-    stopCountdown();
     setPaymentResult(result);
 
-    if (result.status === 'SUCCESS') {
-      const now = new Date().toISOString();
-      const newAmountPaid = participant.amount_paid + payAmountNum;
-      const isFullyPaid = newAmountPaid >= participant.allocation_amount;
-
-      await supabase.from('payment_attempts').insert({
-        split_participant_id: participant.id,
-        amount: payAmountNum,
-        provider: providerLabel,
-        provider_tx_ref: result.txRef,
-        status: 'SUCCESS',
-        payment_method: provider,
-        completed_at: now,
-        idempotency_key: idempotencyKey,
-      });
-
-      await supabase
-        .from('split_participants')
-        .update({
-          status: isFullyPaid ? 'PAID' : 'PENDING',
-          amount_paid: newAmountPaid,
-          paid_at: isFullyPaid ? now : null,
-          payment_ref: result.txRef,
-        })
-        .eq('id', participant.id);
-
-      const { data: allP } = await supabase
-        .from('split_participants')
-        .select('amount_paid, allocation_amount, status')
-        .eq('split_id', split.id);
-      const totalPaid = (allP || []).reduce((sum: number, p: { amount_paid: number }) => sum + (p.amount_paid || 0), 0);
-      const percent = Math.round((totalPaid / split.total_amount) * 100);
-      const newStatus = percent === 100 ? 'SETTLED' : 'PARTIALLY_PAID';
-      await supabase.from('splits').update({ amount_paid: totalPaid, settlement_percent: percent, status: newStatus }).eq('id', split.id);
-
-      await supabase.from('audit_logs').insert({
-        actor: participant.name,
-        action: 'PAYMENT_CONFIRMED',
-        entity_type: 'participant',
-        entity_id: participant.id,
-        metadata: { amount: payAmountNum, tx_ref: result.txRef, method: provider, split_ref: split.ref_code, idempotency_key: idempotencyKey },
-      });
-
-      setTxRef(result.txRef);
-      setParticipant({ ...participant, amount_paid: newAmountPaid, status: isFullyPaid ? 'PAID' : 'PENDING' });
-      setStage('success');
-    } else if (result.status === 'TIMEOUT') {
-      setStage('timeout');
-    } else {
+    if (result.status === 'FAILED') {
+      stopCountdown();
       await supabase.from('payment_attempts').insert({
         split_participant_id: participant.id,
         amount: payAmountNum,
@@ -201,7 +153,43 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
         idempotency_key: idempotencyKey,
       });
       setStage('failed');
+      return;
     }
+
+    if (result.status === 'SUCCESS') {
+      stopCountdown();
+      const now = new Date().toISOString();
+      const newAmountPaid = participant.amount_paid + payAmountNum;
+      const isFullyPaid = newAmountPaid >= participant.allocation_amount;
+      setTxRef(result.txRef);
+      setParticipant({ ...participant, amount_paid: newAmountPaid, status: isFullyPaid ? 'PAID' : 'PENDING' });
+      setStage('success');
+      return;
+    }
+
+    // PENDING status: Keep in 'processing' stage awaiting USSD push / Webhook settlement
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: pCheck } = await supabase
+          .from('split_participants')
+          .select('status, amount_paid, payment_ref')
+          .eq('id', participant.id)
+          .maybeSingle();
+
+        if (pCheck && pCheck.status === 'PAID') {
+          clearInterval(pollInterval);
+          stopCountdown();
+          setTxRef(pCheck.payment_ref || result.txRef);
+          setParticipant({ ...participant, amount_paid: pCheck.amount_paid || payAmountNum, status: 'PAID' });
+          setStage('success');
+        }
+      } catch (err) {
+        console.warn('Status poll error:', err);
+      }
+    }, 2500);
+
+    // Clean up poll on unmount or stage change
+    setTimeout(() => clearInterval(pollInterval), 120000);
   }
 
   function handleCancel() {

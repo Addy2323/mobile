@@ -980,22 +980,32 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
 
     // Save intent and attempt in DB if tied to a participant
     if (participantId) {
-      const pCheck = await client.query('SELECT split_id FROM split_participants WHERE id = $1', [participantId]);
-      if (pCheck.rows.length > 0) {
-        const splitId = pCheck.rows[0].split_id;
-        await client.query(
-          `INSERT INTO payment_intents (split_participant_id, split_id, expected_amount, currency, status, idempotency_key, metadata)
-           VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
-           ON CONFLICT (idempotency_key) DO NOTHING`,
-          [participantId, splitId, targetAmount, currency, orderId, { buyer_phone: targetPhone, payment_method }]
-        );
+      try {
+        const pCheck = await client.query('SELECT split_id FROM split_participants WHERE id = $1', [participantId]);
+        if (pCheck.rows.length > 0) {
+          const splitId = pCheck.rows[0].split_id;
+          try {
+            await client.query(
+              `INSERT INTO payment_intents (split_participant_id, split_id, expected_amount, currency, status, idempotency_key, metadata)
+               VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)`,
+              [participantId, splitId, targetAmount, currency, orderId, { buyer_phone: targetPhone, payment_method }]
+            );
+          } catch (intErr) {
+            console.warn('[FimiPay Intent Insert Notice]:', intErr.message);
+          }
 
-        await client.query(
-          `INSERT INTO payment_attempts (split_participant_id, amount, provider, provider_tx_ref, status, payment_method, idempotency_key, requested_at)
-           VALUES ($1, $2, 'FIMIPAY', $3, 'PENDING', $4, $5, NOW())
-           ON CONFLICT (idempotency_key) DO NOTHING`,
-          [participantId, targetAmount, fpResult.orderId, payment_method, orderId]
-        );
+          try {
+            await client.query(
+              `INSERT INTO payment_attempts (split_participant_id, amount, provider, provider_tx_ref, status, payment_method, idempotency_key, requested_at)
+               VALUES ($1, $2, 'FIMIPAY', $3, 'PENDING', $4, $5, NOW())`,
+              [participantId, targetAmount, fpResult.orderId, payment_method, orderId]
+            );
+          } catch (attErr) {
+            console.warn('[FimiPay Attempt Insert Notice]:', attErr.message);
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[FimiPay DB Notice]:', dbErr.message);
       }
     }
 
