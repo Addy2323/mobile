@@ -1097,8 +1097,8 @@ app.get('/api/payments/fimipay/payouts/status/:withdrawalId', async (req, res) =
   }
 });
 
-// Mandatory Webhook Handler (POST /api/payments/webhooks/fimipay & /webhooks/fimipay)
-app.post(['/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (req, res) => {
+// Mandatory Webhook Handler (POST /, /api/payments/webhooks/fimipay, /webhooks/fimipay)
+app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (req, res) => {
   const rawBuffer = req.body;
   const sigHeader =
     req.headers['x-fimipay-signature'] ||
