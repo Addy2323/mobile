@@ -42,8 +42,6 @@ export default function PaymentView({ split, participant: initialParticipant, on
 
   const methods: { id: PaymentMethod; label: string; icon: typeof Smartphone; desc: string }[] = [
     { id: 'fimipay', label: 'FimiPay Merchant v1', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
-    { id: 'bank', label: 'Bank Transfer', icon: Landmark, desc: 'Direct bank transfer' },
-    { id: 'card', label: 'Card', icon: Wallet, desc: 'Visa / Mastercard' },
   ];
 
   useEffect(() => {
