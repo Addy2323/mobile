@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 
 const SNIPPE_BASE_URL = process.env.SNIPPE_API_URL || 'https://api.snippe.sh';
-const SNIPPE_API_KEY = process.env.SNIPPE_API_KEY || 'sn_live_demo_key_tzs_2026';
-const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || 'whsec_demo_secret_key_tzs_2026';
+const SNIPPE_API_KEY = process.env.SNIPPE_API_KEY || '';
+const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || '';
 
 export class SnippePaymentProvider {
   /**

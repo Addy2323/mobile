@@ -33,6 +33,8 @@ app.use((req, res, next) => {
   const p = req.path;
   const sensitive =
     req.method === 'DELETE' ||
+    p.startsWith('/api/payments/webhooks/snippe') ||
+    p === '/api/payments/initiate' ||
     (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
     (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
