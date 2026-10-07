@@ -131,20 +131,8 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       ref_code: refCode,
     };
 
-    try {
-      const { data, error } = await supabase.from('splits').insert(newSplitPayload);
-      if (error || !data) {
-        console.error('Split creation error:', error);
-        window.alert('Could not create the split. Please try again.');
-        return;
-      }
-
-      const splitObj: Split = Array.isArray(data) ? data[0] : data;
-
-      // Also insert participants
       const participantRows = [
         {
-          split_id: splitObj.id,
           name: organizerName + ' (You)',
           phone: organizerPhone,
           allocation_amount: equalShare,
@@ -153,7 +141,6 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           is_organizer: true,
         },
         ...selectedContacts.map((c) => ({
-          split_id: splitObj.id,
           name: c.name,
           phone: c.phone,
           allocation_amount: equalShare,
@@ -163,12 +150,17 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         })),
       ];
 
-      const { error: pErr } = await supabase.from('split_participants').insert(participantRows);
-      if (pErr) {
-        console.error('Participant insert error:', pErr);
-        window.alert('The split was created but its participants could not be saved. Please try again.');
+
+    try {
+      const { data, error } = await supabase.from('splits').insert({ ...newSplitPayload, participants: participantRows });
+      if (error || !data) {
+        console.error('Split creation error:', error);
+        window.alert('Could not create the split. Please try again.');
         return;
       }
+
+      const splitObj: Split = Array.isArray(data) ? data[0] : data;
+
 
       setCreatedSplit(splitObj);
       setStep(6); // Move to Share screen
