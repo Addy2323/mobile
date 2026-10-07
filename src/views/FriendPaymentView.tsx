@@ -15,7 +15,7 @@ import {
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
 
-type Stage = 'loading' | 'not_found' | 'select' | 'processing' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
+type Stage = 'choose' | 'loading' | 'not_found' | 'select' | 'processing' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
 
 type FriendPaymentViewProps = {
   token: string;
@@ -23,6 +23,7 @@ type FriendPaymentViewProps = {
 
 export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [stage, setStage] = useState<Stage>('loading');
+  const [others, setOthers] = useState<Participant[]>([]);
   const [split, setSplit] = useState<Split | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
@@ -61,16 +62,16 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       if (m) setMerchant(m as Merchant);
     }
 
-    const { data: participants } = await supabase
+    const { data: plist } = await supabase
       .from('split_participants')
       .select('*')
-      .eq('split_id', s.id)
-      .neq('is_organizer', true)
-      .limit(1)
-      .maybeSingle();
+      .eq('split_id', s.id);
+    const payers = (Array.isArray(plist) ? (plist as Participant[]) : []).filter((p) => !p.is_organizer);
+    setOthers(payers);
 
-    if (participants) {
-      const p = participants as Participant;
+    if (payers.length > 1) { setStage('choose'); return; }
+    if (payers.length === 1) {
+      const p = payers[0];
       setParticipant(p);
       if (p.status === 'PAID') { setStage('already_paid'); return; }
     }
@@ -206,6 +207,30 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     setStage('select');
     setPaymentResult(null);
     setError('');
+  }
+
+  if (stage === 'choose') {
+    return (
+      <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
+        <h1 className="text-xl font-bold text-slate-900 mb-1">Who are you?</h1>
+        <p className="text-sm text-slate-500 mb-5">Pick your name to pay your share of "{split?.title}".</p>
+        <div className="space-y-2">
+          {others.map((p) => (
+            <button
+              key={p.id}
+              disabled={p.status === 'PAID'}
+              onClick={() => { setParticipant(p); setStage('select'); }}
+              className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left disabled:opacity-60"
+            >
+              <span className="font-semibold text-slate-900">{p.name}</span>
+              <span className="text-sm text-slate-500">
+                {p.status === 'PAID' ? 'Paid ✓' : formatMoney(Math.max(0, Number(p.allocation_amount || 0) - Number(p.amount_paid || 0)))}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (stage === 'loading') {
