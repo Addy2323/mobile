@@ -133,18 +133,13 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
     try {
       const { data, error } = await supabase.from('splits').insert(newSplitPayload);
-      if (error) {
+      if (error || !data) {
         console.error('Split creation error:', error);
+        window.alert('Could not create the split. Please try again.');
+        return;
       }
 
-      const splitObj: Split = data ? (Array.isArray(data) ? data[0] : data) : {
-        id: 'split_' + Date.now(),
-        ...newSplitPayload,
-        due_at: null,
-        note: null,
-        merchant_id: null,
-        created_at: new Date().toISOString(),
-      };
+      const splitObj: Split = Array.isArray(data) ? data[0] : data;
 
       // Also insert participants
       const participantRows = [
@@ -168,7 +163,12 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         })),
       ];
 
-      await supabase.from('split_participants').insert(participantRows);
+      const { error: pErr } = await supabase.from('split_participants').insert(participantRows);
+      if (pErr) {
+        console.error('Participant insert error:', pErr);
+        window.alert('The split was created but its participants could not be saved. Please try again.');
+        return;
+      }
 
       setCreatedSplit(splitObj);
       setStep(6); // Move to Share screen
@@ -179,7 +179,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
   const shareUrl = createdSplit
     ? `${window.location.origin}/s/${createdSplit.ref_code}`
-    : `https://lumo.co.tz/s/BH7K2`;
+    : '';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
