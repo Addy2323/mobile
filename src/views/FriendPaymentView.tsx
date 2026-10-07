@@ -72,15 +72,18 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     if (participants) {
       const p = participants as Participant;
       setParticipant(p);
-      setPayAmount(String(p.allocation_amount - p.amount_paid));
       if (p.status === 'PAID') { setStage('already_paid'); return; }
     }
 
     setStage('select');
   }
 
-  const remaining = participant ? participant.allocation_amount - participant.amount_paid : 0;
-  const payAmountNum = Number(payAmount) || 0;
+  const alloc = participant
+    ? Number(participant.allocation_amount || 0)
+    : (split ? Number(split.total_amount || 0) / Math.max(1, split.participant_count || 1) : 0);
+  const paid = participant ? Number(participant.amount_paid || 0) : 0;
+  const remaining = Math.max(0, alloc - paid);
+  const payAmountNum = remaining;
 
   function startCountdown() {
     setCountdown(120);
@@ -318,15 +321,18 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone number</label>
         <div className="flex overflow-hidden rounded-lg border border-slate-200"><span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500">+255</span><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="712 345 678" className="min-w-0 flex-1 px-3 py-3 text-sm outline-none" /></div>
         <label className="mt-4 block text-sm font-medium text-slate-700 mb-1.5">Amount to pay (TZS)</label>
-        <input type="number" min="1" max={remaining} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-primary-400" />
-        <p className="mt-1 text-xs text-slate-400">You can pay part of your share now. Remaining: {formatMoney(remaining - payAmountNum > 0 ? remaining - payAmountNum : 0)}</p>
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Fixed Share Amount</span>
+          <span className="text-base font-extrabold text-slate-900">{formatMoney(remaining)}</span>
+        </div>
+        <p className="mt-1.5 text-xs text-slate-400">The payment amount is automatically fixed to your share of this split.</p>
       </div>
 
       {error && <p className="mt-3 rounded-xl border border-error-100 bg-error-50 px-4 py-3 text-sm font-semibold text-error-700">{error}</p>}
 
       <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><p className="text-xs text-slate-500">Payment is processed by a licensed payment provider. LUMO never holds your money.</p></div>
 
-      <button onClick={handlePay} disabled={payAmountNum <= 0 || payAmountNum > remaining || phone.length < 6} className="mt-4 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-primary-500/20 disabled:cursor-not-allowed disabled:bg-slate-200">Pay {formatMoney(payAmountNum || 0)}</button>
+      <button onClick={handlePay} disabled={remaining <= 0 || phone.length < 6} className="mt-4 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-primary-500/20 disabled:cursor-not-allowed disabled:bg-slate-200">Pay {formatMoney(remaining)}</button>
 
       <button onClick={handleClaim} className="mt-3 w-full text-center text-xs font-semibold text-slate-400 hover:text-slate-600">I already paid — tell the organizer</button>
     </div></Shell>;
