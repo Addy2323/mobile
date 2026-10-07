@@ -9,7 +9,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:myamba2323@localhost:5432/lumosprit_bd?schema=public';
+const dbUrl = process.env.DATABASE_URL;
 
 async function runMigration() {
   console.log('🚀 Starting PostgreSQL migration for LUMO Split...');

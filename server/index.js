@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
-const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:myamba2323@localhost:5432/lumosprit_bd?schema=public';
+const dbUrl = process.env.DATABASE_URL;
 
 const pool = new pg.Pool({
   connectionString: dbUrl,
@@ -693,6 +693,7 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
 
 // 3. Webhook Simulator (for instant frontend testing)
 app.post('/api/payments/simulate-webhook', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
   const { participant_id } = req.body;
   if (!participant_id) return res.status(400).json({ error: 'participant_id required' });
 

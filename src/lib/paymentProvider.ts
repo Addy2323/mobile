@@ -49,7 +49,7 @@ export class FimiPayPaymentProviderClient implements PaymentProvider {
   readonly label = 'FimiPay Merchant API v1';
 
   async initiatePayment(request: PaymentRequest): Promise<PaymentResult> {
-    const API_BASE = 'http://localhost:3001/api';
+    const API_BASE = '/api';
 
     try {
       const res = await fetch(`${API_BASE}/payments/fimipay/create-order`, {
@@ -92,7 +92,7 @@ export class FimiPayPaymentProviderClient implements PaymentProvider {
   }
 
   async checkOrderStatus(orderId: string): Promise<PaymentResult> {
-    const API_BASE = 'http://localhost:3001/api';
+    const API_BASE = '/api';
 
     try {
       const res = await fetch(`${API_BASE}/payments/fimipay/order-status`, {
@@ -121,7 +121,7 @@ export class SnippePaymentProviderClient implements PaymentProvider {
   readonly label = 'Snippe Payment Provider';
 
   async initiatePayment(request: PaymentRequest): Promise<PaymentResult> {
-    const API_BASE = 'http://localhost:3001/api';
+    const API_BASE = '/api';
 
     try {
       const res = await fetch(`${API_BASE}/payments/initiate`, {

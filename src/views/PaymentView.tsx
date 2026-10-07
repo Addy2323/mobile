@@ -57,7 +57,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
 
     try {
       if (method === 'fimipay') {
-        const res = await fetch('http://localhost:3001/api/payments/fimipay/create-order', {
+        const res = await fetch('/api/payments/fimipay/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -75,7 +75,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
           return;
         }
       } else {
-        await fetch('http://localhost:3001/api/payments/initiate', {
+        await fetch('/api/payments/initiate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -92,7 +92,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
 
   async function handleSimulateWebhook() {
     try {
-      const res = await fetch('http://localhost:3001/api/payments/simulate-webhook', {
+      const res = await fetch('/api/payments/simulate-webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participant_id: participant.id })
@@ -165,22 +165,6 @@ export default function PaymentView({ split, participant: initialParticipant, on
           <ProcessingStep label="Settlement calculation" />
         </div>
 
-        {/* Demo trigger button for instant Webhook callback simulation */}
-        <div className="p-4 rounded-2xl bg-slate-900 text-white text-left space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-primary-300">DEMO WEBHOOK SIMULATOR</span>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-primary-500/20 text-primary-300">Snippe Sandbox</span>
-          </div>
-          <p className="text-xs text-slate-300">
-            Simulate receiving Snippe's instant HMAC-SHA256 payment confirmation webhook for {participant.name}.
-          </p>
-          <button
-            onClick={handleSimulateWebhook}
-            className="w-full mt-2 bg-gradient-to-r from-success-500 to-emerald-600 hover:from-success-600 hover:to-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-success-900/40"
-          >
-            <CheckCircle2 className="h-4 w-4" /> Simulate PIN Entry & Webhook Approval
-          </button>
-        </div>
       </div>
     );
   }
