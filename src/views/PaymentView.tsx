@@ -42,9 +42,6 @@ export default function PaymentView({ split, participant: initialParticipant, on
 
   const methods: { id: PaymentMethod; label: string; icon: typeof Smartphone; desc: string }[] = [
     { id: 'fimipay', label: 'FimiPay Merchant v1', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
-    { id: 'mpesa', label: 'M-PESA', icon: Smartphone, desc: 'Vodacom mobile money' },
-    { id: 'tigo', label: 'Tigo Pesa', icon: Smartphone, desc: 'Tigo mobile money' },
-    { id: 'airtel', label: 'Airtel Money', icon: Smartphone, desc: 'Airtel mobile money' },
     { id: 'bank', label: 'Bank Transfer', icon: Landmark, desc: 'Direct bank transfer' },
     { id: 'card', label: 'Card', icon: Wallet, desc: 'Visa / Mastercard' },
   ];
@@ -76,7 +73,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
     setPaymentRef(txRef);
 
     try {
-      if (method === 'fimipay') {
+      {
         const res = await fetch('/api/payments/fimipay/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,7 +83,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
             amount: participant.allocation_amount,
             order_id: `idem_${Date.now()}`,
             buyer_name: participant.name,
-            payment_method: 'mobile'
+            payment_method: method === 'card' ? 'card' : method === 'bank' ? 'bank' : 'mobile'
           })
         });
         const data = await res.json();
@@ -94,16 +91,6 @@ export default function PaymentView({ split, participant: initialParticipant, on
           window.location.href = data.payment_gateway_url;
           return;
         }
-      } else {
-        await fetch('/api/payments/initiate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            split_participant_id: participant.id,
-            phone: phoneNumber || '255754123456',
-            payment_method: methods.find((m) => m.id === method)?.label || 'M-PESA'
-          })
-        });
       }
     } catch (err) {
       console.error('Error initiating payment:', err);
@@ -118,7 +105,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
             <CheckCircle2 className="h-10 w-10 text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Payment Confirmed</h1>
-          <p className="text-slate-500">Your contribution has been recorded via Snippe and the organizer has been notified.</p>
+          <p className="text-slate-500">Your contribution has been recorded and the organizer has been notified.</p>
         </div>
 
         <TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} />
@@ -161,9 +148,9 @@ export default function PaymentView({ split, participant: initialParticipant, on
           USSD Push prompt sent to {phoneNumber || 'phone'}. Enter your PIN to confirm.
         </p>
         <div className="max-w-xs mx-auto space-y-2 mb-8">
-          <ProcessingStep label="USSD Push dispatched to Snippe" done />
+          <ProcessingStep label="USSD Push dispatched" done />
           <ProcessingStep label="Awaiting PIN entry on phone" active />
-          <ProcessingStep label="Snippe Webhook (HMAC-SHA256)" />
+          <ProcessingStep label="Payment confirmation" />
           <ProcessingStep label="Settlement calculation" />
         </div>
 
