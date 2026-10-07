@@ -124,7 +124,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       mode: method,
       organizer_name: organizerName,
       organizer_phone: organizerPhone,
-      status: 'Collecting',
+      status: 'ACTIVE',
       settlement_percent: 0,
       amount_paid: 0,
       participant_count: totalPeople,
@@ -149,7 +149,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           phone: organizerPhone,
           allocation_amount: equalShare,
           amount_paid: equalShare, // Organizer share recorded
-          status: 'Paid',
+          status: 'PAID',
           is_organizer: true,
         },
         ...selectedContacts.map((c) => ({
@@ -158,7 +158,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           phone: c.phone,
           allocation_amount: equalShare,
           amount_paid: 0,
-          status: 'Pending',
+          status: 'PENDING',
           is_organizer: false,
         })),
       ];
