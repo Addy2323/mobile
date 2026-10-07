@@ -83,6 +83,7 @@ export class SnippePaymentProvider {
    */
   static verifyWebhookSignature(rawBodyBuffer, signatureHeader) {
     if (!signatureHeader || !rawBodyBuffer) return false;
+    if (!SNIPPE_WEBHOOK_SECRET) return false;
     try {
       const computedSignature = crypto
         .createHmac('sha256', SNIPPE_WEBHOOK_SECRET)
@@ -94,8 +95,7 @@ export class SnippePaymentProvider {
       return crypto.timingSafeEqual(Buffer.from(computedSignature), Buffer.from(cleanSig));
     } catch (err) {
       console.error('[SnippeProvider] Webhook signature verification error:', err.message);
-      // In sandbox mode without production key, fallback to true if header exists
-      return true;
+      return false;
     }
   }
 

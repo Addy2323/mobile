@@ -49,6 +49,26 @@ export default function PaymentView({ split, participant: initialParticipant, on
     { id: 'card', label: 'Card', icon: Wallet, desc: 'Visa / Mastercard' },
   ];
 
+  useEffect(() => {
+    if (stage !== 'processing') return;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      try {
+        const res = await fetch(`/api/participants/${participant.id}/status`);
+        const data = await res.json();
+        if (data.status === 'PAID') {
+          clearInterval(timer);
+          setStage('success');
+        }
+      } catch (err) {
+        console.error('Status check failed:', err);
+      }
+      if (tries >= 100) clearInterval(timer);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [stage, participant.id]);
+
   async function handlePay() {
     setStage('processing');
 
@@ -87,24 +107,6 @@ export default function PaymentView({ split, participant: initialParticipant, on
       }
     } catch (err) {
       console.error('Error initiating payment:', err);
-    }
-  }
-
-  async function handleSimulateWebhook() {
-    try {
-      const res = await fetch('/api/payments/simulate-webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participant_id: participant.id })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setStage('success');
-      }
-    } catch (err) {
-      console.error('Error simulating Snippe webhook:', err);
-      // Fallback
-      setStage('success');
     }
   }
 

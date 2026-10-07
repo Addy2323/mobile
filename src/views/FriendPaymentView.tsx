@@ -124,7 +124,10 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     } else if (['snippe', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(provider)) {
       providerClient = new SnippePaymentProviderClient();
     } else {
-      providerClient = new MockPaymentProvider(false);
+      stopCountdown();
+      setError('This payment method is not available.');
+      setStage('select');
+      return;
     }
 
     const result = await providerClient.initiatePayment({
@@ -137,71 +140,46 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       participantName: participant.name,
       participantId: participant.id
     });
-
-    stopCountdown();
     setPaymentResult(result);
 
-    if (result.status === 'SUCCESS') {
-      const now = new Date().toISOString();
-      const newAmountPaid = participant.amount_paid + payAmountNum;
-      const isFullyPaid = newAmountPaid >= participant.allocation_amount;
-
-      await supabase.from('payment_attempts').insert({
-        split_participant_id: participant.id,
-        amount: payAmountNum,
-        provider: providerLabel,
-        provider_tx_ref: result.txRef,
-        status: 'SUCCESS',
-        payment_method: provider,
-        completed_at: now,
-        idempotency_key: idempotencyKey,
-      });
-
-      await supabase
-        .from('split_participants')
-        .update({
-          status: isFullyPaid ? 'PAID' : 'PENDING',
-          amount_paid: newAmountPaid,
-          paid_at: isFullyPaid ? now : null,
-          payment_ref: result.txRef,
-        })
-        .eq('id', participant.id);
-
-      const { data: allP } = await supabase
-        .from('split_participants')
-        .select('amount_paid, allocation_amount, status')
-        .eq('split_id', split.id);
-      const totalPaid = (allP || []).reduce((sum: number, p: { amount_paid: number }) => sum + (p.amount_paid || 0), 0);
-      const percent = Math.round((totalPaid / split.total_amount) * 100);
-      const newStatus = percent === 100 ? 'SETTLED' : 'PARTIALLY_PAID';
-      await supabase.from('splits').update({ amount_paid: totalPaid, settlement_percent: percent, status: newStatus }).eq('id', split.id);
-
-      await supabase.from('audit_logs').insert({
-        actor: participant.name,
-        action: 'PAYMENT_CONFIRMED',
-        entity_type: 'participant',
-        entity_id: participant.id,
-        metadata: { amount: payAmountNum, tx_ref: result.txRef, method: provider, split_ref: split.ref_code, idempotency_key: idempotencyKey },
-      });
-
-      setTxRef(result.txRef);
-      setParticipant({ ...participant, amount_paid: newAmountPaid, status: isFullyPaid ? 'PAID' : 'PENDING' });
-      setStage('success');
-    } else if (result.status === 'TIMEOUT') {
-      setStage('timeout');
-    } else {
-      await supabase.from('payment_attempts').insert({
-        split_participant_id: participant.id,
-        amount: payAmountNum,
-        provider: providerLabel,
-        provider_tx_ref: result.txRef,
-        status: 'FAILED',
-        payment_method: provider,
-        failure_code: result.failureCode || 'UNKNOWN',
-        idempotency_key: idempotencyKey,
-      });
-      setStage('failed');
+    if (result.paymentGatewayUrl) {
+      stopCountdown();
+      window.location.href = result.paymentGatewayUrl;
+      return;
     }
+
+    if (result.status === 'FAILED') {
+      stopCountdown();
+      setStage('failed');
+      return;
+    }
+
+    if (result.status === 'TIMEOUT') {
+      stopCountdown();
+      setStage('timeout');
+      return;
+    }
+
+    // Wait for the provider's signed webhook to mark the participant PAID on the server
+    setTxRef(result.txRef);
+    const deadline = Date.now() + 2 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      try {
+        const res = await fetch(`/api/participants/${participant.id}/status`);
+        const data = await res.json();
+        if (data.status === 'PAID') {
+          stopCountdown();
+          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
+          setStage('success');
+          return;
+        }
+      } catch {
+        // keep waiting
+      }
+    }
+    stopCountdown();
+    setStage('timeout');
   }
 
   function handleCancel() {
