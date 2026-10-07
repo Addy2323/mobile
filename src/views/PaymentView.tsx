@@ -41,7 +41,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
   }, [split.merchant_id]);
 
   const methods: { id: PaymentMethod; label: string; icon: typeof Smartphone; desc: string }[] = [
-    { id: 'fimipay', label: 'FimiPay Merchant v1', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
+    { id: 'fimipay', label: 'Mobile money', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
   ];
 
   useEffect(() => {
@@ -69,6 +69,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
       window.alert('Enter a valid phone number.');
       return;
     }
+    const prevStage = stage;
     setStage('processing');
 
     const txRef = `FMP-TX-${Date.now().toString().slice(-7)}`;
@@ -88,7 +89,12 @@ export default function PaymentView({ split, participant: initialParticipant, on
             payment_method: method === 'card' ? 'card' : method === 'bank' ? 'bank' : 'mobile'
           })
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+          window.alert(data.error || 'Payment could not be started. Please try again.');
+          setStage(prevStage);
+          return;
+        }
         if (data.payment_gateway_url) {
           window.location.href = data.payment_gateway_url;
           return;
@@ -96,6 +102,8 @@ export default function PaymentView({ split, participant: initialParticipant, on
       }
     } catch (err) {
       console.error('Error initiating payment:', err);
+      window.alert('Could not reach the payment service. Please try again.');
+      setStage(prevStage);
     }
   }
 
@@ -248,7 +256,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
       {method === 'fimipay' && (
         <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-5">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            {methods.find((m) => m.id === method)?.label} Phone Number
+            Mobile money phone number
           </label>
           <input
             type="tel"
