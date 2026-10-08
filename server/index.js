@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { SnippePaymentProvider } from './snippeProvider.js';
 import { FimiPayProvider } from './fimipayProvider.js';
 import { PaymentRoutingService } from './paymentRoutingService.js';
+import { createAdminRouter } from './adminRoutes.js';
 
 dotenv.config();
 
@@ -24,7 +25,10 @@ app.use('/api/payments/webhooks/fimipay', express.raw({ type: 'application/json'
 app.use('/webhooks/fimipay', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
-// Block money-moving and destructive routes unless the admin key is sent
+// Mount Admin API Router
+app.use('/api/admin', createAdminRouter(pool));
+
+// Block money-moving and destructive legacy routes unless the admin key is sent
 const safeEq = (x, y) => {
   const bx = Buffer.from(x || '');
   const by = Buffer.from(y || '');
@@ -40,7 +44,6 @@ app.use((req, res, next) => {
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
     (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
     (req.method === 'PATCH' && p.startsWith('/api/merchants')) ||
-    p.startsWith('/api/admin') ||
     /^\/api\/payments\/fimipay\/(balance|balances|transactions|payouts)/.test(p);
   if (!sensitive) return next();
   const key = process.env.ADMIN_KEY;

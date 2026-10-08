@@ -17,13 +17,22 @@ import ControlNumberView from '@/views/ControlNumberView';
 
 import { LayoutSwitch } from '@/mobile/components/LayoutSwitch';
 import { MobileShell } from '@/mobile/components/MobileShell';
+import { AdminApp } from '@/admin/AdminApp';
 
 function getPublicToken(): string | null {
   const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9]+)/);
   return match ? match[1] : null;
 }
 
+function isAdminRoute(): boolean {
+  return window.location.pathname.startsWith('/admin');
+}
+
 export default function App() {
+  if (isAdminRoute()) {
+    return <AdminApp />;
+  }
+
   const publicToken = getPublicToken();
   const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('lumo_authenticated') === 'true');
   const [view, setView] = useState<View>('home');
