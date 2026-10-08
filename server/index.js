@@ -314,6 +314,7 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
 
 // PUBLIC PAYMENT LINK PAY
 app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'], async (req, res) => {
+  if (process.env.ALLOW_SIMULATED_PAYMENTS !== 'true') return res.status(503).json({ error: 'Online payment is not enabled yet.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

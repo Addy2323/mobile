@@ -40,7 +40,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   const [data, setData] = useState<PublicPaymentData | null>(null);
 
   const [provider, setProvider] = useState<'mobile' | 'bank' | 'card'>('mobile');
-  const [phone, setPhone] = useState('0754 123 456');
+  const [phone, setPhone] = useState('');
   const [countdown, setCountdown] = useState(45);
   const [txRef, setTxRef] = useState('');
   const [loading, setLoading] = useState(false);
@@ -111,9 +111,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
       setCountdown(45);
       setStep('waiting');
     } catch {
-      setTxRef('PL-' + Math.floor(100000 + Math.random() * 900000));
-      setCountdown(45);
-      setStep('waiting');
+      alert('Network error. Payment was not started.');
     } finally {
       setLoading(false);
     }
