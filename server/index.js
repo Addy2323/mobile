@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import pg from 'pg';
 import crypto from 'crypto';
@@ -10,6 +11,8 @@ import { PaymentRoutingService } from './paymentRoutingService.js';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
+app.use('/api/public/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
 const port = process.env.PORT || 3001;
 const dbUrl = process.env.DATABASE_URL;
 
@@ -72,14 +75,8 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/destinations', async (req, res) => {
   try {
     const { owner_user_id } = req.query;
-    let query = "SELECT * FROM payment_destinations WHERE status = 'ACTIVE'";
-    const values = [];
-    if (owner_user_id) {
-      query += ' AND owner_user_id = $1';
-      values.push(owner_user_id);
-    }
-    query += ' ORDER BY created_at DESC';
-    const { rows } = await pool.query(query, values);
+    if (!owner_user_id) return res.status(400).json({ error: 'owner_user_id required' });
+    const { rows } = await pool.query("SELECT * FROM payment_destinations WHERE status = 'ACTIVE' AND owner_user_id = $1 ORDER BY created_at DESC", [owner_user_id]);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -135,7 +132,9 @@ app.post('/api/destinations', async (req, res) => {
 
 app.get('/api/destinations/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [req.params.id]);
+    const { owner_user_id } = req.query;
+    if (!owner_user_id) return res.status(400).json({ error: 'owner_user_id required' });
+    const { rows } = await pool.query('SELECT * FROM payment_destinations WHERE id = $1 AND owner_user_id = $2', [req.params.id, owner_user_id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Destination not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -298,7 +297,7 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
         status: split.status,
         organizerName: split.organizer_name,
         participantCount: split.participant_count,
-        participants: pRes.rows,
+        participants: pRes.rows.map(p => ({ id: p.id, name: p.name, allocation_amount: p.allocation_amount, amount_paid: p.amount_paid, status: p.status, is_organizer: p.is_organizer, claim_status: p.claim_status })),
         destinationSnapshot: split.destination_snapshot || PaymentRoutingService.createSnapshot(null)
       });
     }
