@@ -9,6 +9,7 @@ const FIMIPAY_WEBHOOK_SECRET = process.env.FIMIPAY_WEBHOOK_SECRET || process.env
 
 /**
  * Service class for FimiPay Merchant API v1
+ * Source of Truth: fimipay-ai-integration-brief.md
  */
 export class FimiPayProvider {
   /**
@@ -17,10 +18,12 @@ export class FimiPayProvider {
   static async request(endpoint, options = {}) {
     const url = `${FIMIPAY_BASE_URL}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
     const method = options.method || 'GET';
+    const secret = FIMIPAY_SECRET_KEY;
+
     const headers = {
-      'Authorization': `Bearer ${FIMIPAY_SECRET_KEY}`,
-      'X-Api-Key': FIMIPAY_SECRET_KEY,
-      'X-Fimipay-Secret': FIMIPAY_SECRET_KEY,
+      'Authorization': `Bearer ${secret}`,
+      'X-Api-Key': secret,
+      'X-Fimipay-Secret': secret,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     };
@@ -71,7 +74,7 @@ export class FimiPayProvider {
   }
 
   /**
-   * Format phone number to clean international standard (e.g. 255754123456)
+   * Format phone number to clean international standard for TZ collection (e.g. 255682812345)
    */
   static formatPhone(phone) {
     if (!phone) return '';
@@ -85,7 +88,21 @@ export class FimiPayProvider {
   }
 
   /**
-   * 1) POST /payment/create_order — start payment collection
+   * Format mobile wallet payout account number (9-digit 6XXXXXXXX / 7XXXXXXXX, strip 0 or 255)
+   */
+  static formatPayoutPhone(accountNumber) {
+    if (!accountNumber) return '';
+    let clean = accountNumber.toString().replace(/[^\d]/g, '');
+    if (clean.startsWith('255') && clean.length === 12) {
+      clean = clean.slice(3);
+    } else if (clean.startsWith('0') && clean.length === 10) {
+      clean = clean.slice(1);
+    }
+    return clean;
+  }
+
+  /**
+   * 1) POST /payment/create_order — start payment collection using §4.2 Decision Tree
    */
   static async createOrder({
     buyer_phone,
@@ -98,15 +115,47 @@ export class FimiPayProvider {
     redirect_url,
     test_outcome
   }) {
-    const formattedPhone = this.formatPhone(buyer_phone);
-    const cleanOrderId = (order_id || `fp_ord_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`).slice(0, 64);
+    if (!buyer_phone || !amount) {
+      throw new Error('buyer_phone and amount are required fields for create_order');
+    }
+
+    const cur = (currency || 'TZS').toUpperCase();
+    let normMethod = (payment_method || 'mobile').toLowerCase();
+    
+    // Normalize aliases
+    if (['mobile_money', 'wallet', 'ussd', 'momo'].includes(normMethod)) normMethod = 'mobile';
+    if (['bank_transfer', 'banktransfer'].includes(normMethod)) normMethod = 'bank';
+
+    // Apply §4.2 Decision Tree Rules
+    let formattedPhone = buyer_phone ? buyer_phone.toString().replace(/[^\d]/g, '') : '';
+    if (cur === 'TZS') {
+      formattedPhone = this.formatPhone(buyer_phone);
+    }
+
+    // Hosted checkout check
+    const isHostedCheckout =
+      (cur === 'TZS' && (normMethod === 'card' || normMethod === 'bank')) ||
+      ['KES', 'UGX', 'NGN', 'GHS', 'XAF', 'ZAR'].includes(cur) ||
+      cur === 'USD';
+
+    if (cur === 'USD') {
+      normMethod = 'card'; // Force card for USD
+    }
+
+    if (isHostedCheckout) {
+      if (!buyer_email || !redirect_url) {
+        throw new Error(`Hosted checkout (${cur} ${normMethod}) requires both buyer_email and redirect_url.`);
+      }
+    }
+
+    const cleanOrderId = (order_id || `fp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`).slice(0, 64);
 
     const payload = {
       buyer_phone: formattedPhone,
-      amount: Math.round(Number(amount)),
+      amount: Number(amount),
       order_id: cleanOrderId,
-      currency: currency || 'TZS',
-      payment_method: payment_method || 'mobile'
+      currency: cur,
+      payment_method: normMethod
     };
 
     if (buyer_name) payload.buyer_name = buyer_name;
@@ -114,7 +163,7 @@ export class FimiPayProvider {
     if (redirect_url) payload.redirect_url = redirect_url;
     if (test_outcome && process.env.NODE_ENV !== 'production') payload.test_outcome = test_outcome;
 
-    console.log(`[FimiPayProvider] Creating order ${cleanOrderId} for ${formattedPhone} (amount: ${amount}):`, payload);
+    console.log(`[FimiPayProvider] Initiating order ${cleanOrderId} (${cur} ${amount}):`, payload);
 
     const res = await this.request('/payment/create_order', {
       method: 'POST',
@@ -122,11 +171,13 @@ export class FimiPayProvider {
     });
 
     if (res.success && res.data) {
+      const pGatewayUrl = res.data.payment_gateway_url || res.data.data?.payment_gateway_url || null;
       return {
         success: true,
-        orderId: res.data.order_id || cleanOrderId,
-        paymentStatus: res.data.payment_status || res.data.status || 'PENDING',
-        paymentGatewayUrl: res.data.payment_gateway_url || res.data.redirect_url || null,
+        orderId: res.data.order_id || res.data.data?.order_id || cleanOrderId,
+        paymentStatus: res.data.payment_status || res.data.data?.payment_status || 'PENDING',
+        paymentGatewayUrl: pGatewayUrl,
+        requiresRedirect: Boolean(pGatewayUrl),
         data: res.data
       };
     }
@@ -136,7 +187,6 @@ export class FimiPayProvider {
       orderId: cleanOrderId,
       paymentStatus: 'PENDING',
       error: res.error || 'Failed to create FimiPay order',
-      // Fallback response structure so payment flow can continue smoothly
       data: res.data || null
     };
   }
@@ -150,7 +200,7 @@ export class FimiPayProvider {
     }
 
     const payload = { order_id: orderId };
-    console.log(`[FimiPayProvider] Checking order status for: ${orderId}`);
+    console.log(`[FimiPayProvider] Polling order status for: ${orderId}`);
 
     const res = await this.request('/payment/order_status', {
       method: 'POST',
@@ -158,15 +208,16 @@ export class FimiPayProvider {
     });
 
     if (res.success && res.data) {
-      const rawStatus = (res.data.payment_status || res.data.status || 'PENDING').toUpperCase();
-      const isPaid = ['SUCCESS', 'COMPLETED'].includes(String(rawStatus || '').toUpperCase());
+      const dataObj = res.data.data || res.data;
+      const rawStatus = (dataObj.payment_status || dataObj.status || 'PENDING').toUpperCase();
+      const isPaid = ['SUCCESS', 'COMPLETED'].includes(rawStatus);
 
       return {
         success: true,
         orderId,
         paymentStatus: rawStatus,
         isPaid,
-        data: res.data
+        data: dataObj
       };
     }
 
@@ -183,7 +234,7 @@ export class FimiPayProvider {
    * 3) POST /transactions/readbyId — list recent orders for this API key
    */
   static async getTransactions() {
-    console.log('[FimiPayProvider] Fetching recent transactions...');
+    console.log('[FimiPayProvider] Fetching recent transactions list...');
     const res = await this.request('/transactions/readbyId', {
       method: 'POST',
       body: {}
@@ -211,7 +262,7 @@ export class FimiPayProvider {
    * 4) GET /balance — merchant available balance (alias: GET /balances)
    */
   static async getBalance(currency = 'TZS') {
-    console.log(`[FimiPayProvider] Fetching merchant balance (currency: ${currency})...`);
+    console.log(`[FimiPayProvider] Querying merchant balance (currency: ${currency})...`);
     let res = await this.request(`/balance?currency=${encodeURIComponent(currency)}`, {
       method: 'GET'
     });
@@ -224,14 +275,15 @@ export class FimiPayProvider {
     }
 
     if (res.success && res.data) {
+      const bData = res.data.data || res.data;
       return {
         success: true,
-        available: res.data.available || res.data.withdrawable_now || res.data.balance || 0,
-        withdrawableNow: res.data.withdrawable_now || res.data.available || 0,
-        currency: res.data.currency || currency,
-        mobileMoneyBalance: res.data.mobile_money || res.data.mobile_balance || 0,
-        cardBalance: res.data.card || res.data.card_balance || 0,
-        data: res.data
+        available: bData.available || bData.withdrawable_now || bData.balance || 0,
+        withdrawableNow: bData.withdrawable_now || bData.available || 0,
+        currency: bData.currency || currency,
+        mobileMoneyBalance: bData.mobile_money || bData.mobile_balance || 0,
+        cardBalance: bData.card || bData.card_balance || 0,
+        data: bData
       };
     }
 
@@ -262,17 +314,26 @@ export class FimiPayProvider {
       };
     }
 
+    // Format account number depending on mobile vs bank
+    const isMobileWallet = ['M-Pesa', 'Tigo Pesa', 'Mixx by Yas', 'Airtel Money', 'Halopesa'].some(
+      (m) => m.toLowerCase() === method.toLowerCase()
+    );
+
+    const formattedAccount = isMobileWallet
+      ? this.formatPayoutPhone(account_number)
+      : accountNumber.toString();
+
     const payload = {
-      amount: Math.round(Number(amount)),
+      amount: Number(amount),
       method,
-      account_number: account_number.toString(),
+      account_number: formattedAccount,
       currency: currency || 'TZS',
       fee_handling: fee_handling || 'deduct'
     };
 
     if (account_name) payload.account_name = account_name;
 
-    console.log(`[FimiPayProvider] Requesting payout of ${currency} ${amount} via ${method} to ${account_number}:`, payload);
+    console.log(`[FimiPayProvider] Requesting payout of ${currency} ${amount} via ${method} to ${formattedAccount}:`, payload);
 
     const res = await this.request('/payouts/create', {
       method: 'POST',
@@ -280,11 +341,12 @@ export class FimiPayProvider {
     });
 
     if (res.success && res.data) {
+      const pData = res.data.data || res.data;
       return {
         success: true,
-        withdrawalId: res.data.withdrawal_id || res.data.id || res.data.payout_id || `fp_wth_${Date.now()}`,
-        status: (res.data.status || 'PENDING').toUpperCase(),
-        data: res.data
+        withdrawalId: pData.withdrawal_id || pData.id || pData.payout_id || `fp_wth_${Date.now()}`,
+        status: (pData.status || 'PENDING').toUpperCase(),
+        data: pData
       };
     }
 
@@ -304,17 +366,18 @@ export class FimiPayProvider {
       return { success: false, error: 'withdrawalId is required' };
     }
 
-    console.log(`[FimiPayProvider] Checking payout status for withdrawal_id: ${withdrawalId}`);
+    console.log(`[FimiPayProvider] Polling payout status for withdrawal_id: ${withdrawalId}`);
     const res = await this.request(`/payouts/status/${encodeURIComponent(withdrawalId)}`, {
       method: 'GET'
     });
 
     if (res.success && res.data) {
+      const pData = res.data.data || res.data;
       return {
         success: true,
         withdrawalId,
-        status: (res.data.status || res.data.payout_status || 'PENDING').toUpperCase(),
-        data: res.data
+        status: (pData.status || pData.payout_status || 'PENDING').toUpperCase(),
+        data: pData
       };
     }
 
@@ -327,34 +390,29 @@ export class FimiPayProvider {
   }
 
   /**
-   * Webhook Signature Verification
+   * Webhook Signature Verification (§ 7.1)
    * X-Fimipay-Signature = HMAC-SHA256(raw_request_body, webhook_secret)
    */
   static verifyWebhookSignature(rawBodyBuffer, signatureHeader) {
-    if (!signatureHeader || !rawBodyBuffer) {
-      console.warn('[FimiPayProvider] Webhook signature or raw body buffer missing');
+    const secret = FIMIPAY_WEBHOOK_SECRET;
+    if (!signatureHeader || !rawBodyBuffer || !secret) {
+      console.warn('[FimiPayProvider] Webhook signature, raw body buffer, or FIMIPAY_WEBHOOK_SECRET missing');
       return false;
     }
 
-    if (!FIMIPAY_WEBHOOK_SECRET) return false;
-
     try {
-      const computedSignature = crypto
-        .createHmac('sha256', FIMIPAY_WEBHOOK_SECRET)
+      const expected = crypto
+        .createHmac('sha256', secret)
         .update(rawBodyBuffer)
         .digest('hex');
 
-      const cleanHeaderSig = signatureHeader.replace(/^sha256=/, '').trim();
+      const got = String(signatureHeader || '').replace(/^sha256=/, '').trim();
 
-      const computedBuf = Buffer.from(computedSignature, 'utf8');
-      const headerBuf = Buffer.from(cleanHeaderSig, 'utf8');
-
-      if (computedBuf.length !== headerBuf.length) {
-        // Safe fallbacks for dev/test environments
-        return computedSignature.toLowerCase() === cleanHeaderSig.toLowerCase();
+      if (got.length !== expected.length) {
+        return false;
       }
 
-      return crypto.timingSafeEqual(computedBuf, headerBuf);
+      return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
     } catch (err) {
       console.error('[FimiPayProvider] Error verifying webhook signature:', err.message);
       return false;
