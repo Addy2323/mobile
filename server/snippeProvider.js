@@ -6,8 +6,8 @@ function getAuthHeader() {
   return `Bearer ${key}`;
 }
 
-const SNIPPE_BASE_URL = process.env.SNIPPE_API_URL || 'https://api.snippe.sh';
-const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || '';
+const SNIPPE_BASE_URL = process.env.SNIPPE_API_URL || process.env.SNIPPE_BASE_URL || 'https://api.snippe.sh';
+const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || process.env.SNIPPE_SECRET_KEY || '';
 
 export class SnippePaymentProvider {
   /**
