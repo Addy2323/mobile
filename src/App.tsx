@@ -20,7 +20,7 @@ import { MobileShell } from '@/mobile/components/MobileShell';
 import { AdminApp } from '@/admin/AdminApp';
 
 function getPublicToken(): string | null {
-  const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9]+)/);
+  const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]+)/);
   return match ? match[1] : null;
 }
 
