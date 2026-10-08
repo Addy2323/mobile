@@ -124,20 +124,38 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       destination: useCustomDestination ? destination : null,
     };
 
+    const participantRows = [
+      {
+        name: organizerName + ' (You)',
+        phone: organizerPhone,
+        allocation_amount: equalShare,
+        amount_paid: equalShare,
+        status: 'PAID',
+        is_organizer: true,
+      },
+      ...selectedContacts.map((c) => ({
+        name: c.name,
+        phone: c.phone,
+        allocation_amount: equalShare,
+        amount_paid: 0,
+        status: 'PENDING',
+        is_organizer: false,
+      })),
+    ];
+
     try {
       const apiRes = await fetch('/api/splits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSplitPayload),
+        body: JSON.stringify({ ...newSplitPayload, participants: participantRows }),
       });
 
-      let splitObj: Split;
-      if (apiRes.ok) {
-        splitObj = await apiRes.json();
-      } else {
-        const { data } = await supabase.from('splits').insert(newSplitPayload).select().single();
-        splitObj = data as Split;
+      if (!apiRes.ok) {
+        console.error('Split creation failed:', apiRes.status);
+        window.alert('Could not create the split. Please try again.');
+        return;
       }
+      const splitObj: Split = await apiRes.json();
 
       setCreatedSplit(splitObj);
       setStep(6);
