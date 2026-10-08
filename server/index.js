@@ -14,6 +14,7 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 app.use('/api/public/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
+app.use('/api/splits/ref/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
 const port = process.env.PORT || 3001;
 const dbUrl = process.env.DATABASE_URL;
 
@@ -616,7 +617,7 @@ app.get('/api/splits', async (req, res) => {
       ORDER BY s.created_at DESC
     `;
     const { rows } = await pool.query(query);
-    res.json(rows);
+    res.json(rows.map(({ organizer_phone, ...rest }) => rest));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -842,6 +843,7 @@ app.patch('/api/splits/:id', async (req, res) => {
 // --- PARTICIPANTS ---
 app.get('/api/participants', async (req, res) => {
   try {
+    if (!req.query.split_id) return res.status(400).json({ error: 'split_id required' });
     const { split_id } = req.query;
     let query = 'SELECT * FROM split_participants';
     const values = [];
