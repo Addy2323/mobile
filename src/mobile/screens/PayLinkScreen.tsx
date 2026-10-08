@@ -3,6 +3,7 @@ import { ArrowLeft, Link as LinkIcon, Copy, MessageCircle, Sparkles, Clock, Chec
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
+import { getOwnerId } from '@/lib/ownerId';
 
 interface PayLinkScreenProps {
   onBack: () => void;
@@ -44,7 +45,7 @@ export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }
   async function fetchMyLinks() {
     setLoadingLinks(true);
     try {
-      const res = await fetch('/api/payment-links');
+      const res = await fetch(`/api/payment-links?owner_user_id=${encodeURIComponent(getOwnerId())}`);
       if (res.ok) {
         const data = await res.json();
         setMyLinks(data);
@@ -72,6 +73,7 @@ export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }
         amount: parseFloat(amount),
         expiration_mode: expirationMode,
         destination: useCustomDestination ? destination : null,
+        owner_user_id: getOwnerId(),
       };
 
       const res = await fetch('/api/payment-links', {
