@@ -341,6 +341,10 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     </div></Shell>;
   }
 
+  if (stage === 'select' && split && !participant) {
+    return <Shell><div className="mx-auto max-w-md px-4 py-16 text-center"><h1 className="text-lg font-extrabold text-slate-900">Nothing to pay yet</h1><p className="mt-2 text-sm text-slate-500">{split.organizer_name || 'The organizer'} has not added anyone to pay on this split. Ask them to add participants and share the link again.</p></div></Shell>;
+  }
+
   return <Shell><div className="mx-auto max-w-md px-4 py-16 text-center"><p className="text-sm text-slate-500">Loading...</p></div></Shell>;
 }
 
