@@ -227,14 +227,11 @@ app.post('/api/payment-links', async (req, res) => {
 app.get('/api/payment-links', async (req, res) => {
   try {
     const { owner_user_id } = req.query;
-    let query = 'SELECT * FROM payment_links';
-    const values = [];
-    if (owner_user_id) {
-      query += ' WHERE owner_user_id = $1';
-      values.push(owner_user_id);
-    }
-    query += ' ORDER BY created_at DESC';
-    const { rows } = await pool.query(query, values);
+    if (!owner_user_id) return res.status(400).json({ error: 'owner_user_id required' });
+    const { rows } = await pool.query(
+      'SELECT * FROM payment_links WHERE owner_user_id = $1 ORDER BY created_at DESC',
+      [owner_user_id]
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
