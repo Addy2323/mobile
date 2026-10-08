@@ -8,6 +8,10 @@ import { SnippePaymentProvider } from './snippeProvider.js';
 import { FimiPayProvider } from './fimipayProvider.js';
 import { PaymentRoutingService } from './paymentRoutingService.js';
 import { createAdminRouter } from './adminRoutes.js';
+import { PaymentState, SettlementState, mapProviderStatusToPaymentState } from './paymentState.js';
+import { ProviderCapabilityService } from './providerCapabilities.js';
+import { SettlementRouter } from './settlementRouter.js';
+import { PaymentReconciliationService } from './paymentReconciliationService.js';
 
 dotenv.config();
 
@@ -41,9 +45,11 @@ const safeEq = (x, y) => {
 };
 app.use((req, res, next) => {
   const p = req.path;
+  // Webhook endpoints must be public for payment providers (secured via HMAC signatures)
+  if (p.startsWith('/api/payments/webhooks/') || p.startsWith('/webhooks/')) return next();
+
   const sensitive =
     req.method === 'DELETE' ||
-    p.startsWith('/api/payments/webhooks/snippe') ||
     p === '/api/payments/initiate' ||
     (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
@@ -1101,7 +1107,139 @@ app.post('/api/payments/initiate', async (req, res) => {
   }
 });
 
-// 2. Real-Time Snippe Webhook Endpoint (HMAC Signed & Idempotent)
+// Real-Time Payment Status Polling Endpoint (Used by Frontend Timer Recovery)
+app.get('/api/payments/:paymentId/status', async (req, res) => {
+  try {
+    const paymentId = req.params.paymentId;
+
+    // Check payment_attempts or payment_intents
+    const paRes = await pool.query(
+      `SELECT pa.*, sp.status AS participant_status, sp.split_id
+       FROM payment_attempts pa
+       LEFT JOIN split_participants sp ON pa.split_participant_id = sp.id
+       WHERE pa.id::text = $1 OR pa.provider_tx_ref = $1 OR pa.idempotency_key = $1 OR pa.split_participant_id::text = $1
+       ORDER BY pa.created_at DESC LIMIT 1`,
+      [paymentId]
+    );
+
+    if (paRes.rows.length === 0) {
+      return res.json({
+        paymentStatus: PaymentState.PROCESSING,
+        providerStatus: 'PENDING',
+        settlementStatus: SettlementState.SETTLEMENT_PENDING,
+        reference: paymentId,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    const pa = paRes.rows[0];
+    let paymentState = pa.payment_status || (pa.status === 'SUCCESS' ? PaymentState.PROVIDER_SUCCESS : pa.status === 'FAILED' ? PaymentState.PROVIDER_FAILED : PaymentState.PROCESSING);
+    let settlementState = pa.settlement_status || SettlementState.SETTLEMENT_PENDING;
+
+    // If still in processing state, attempt an active status query to the provider
+    if (paymentState === PaymentState.PROCESSING || paymentState === PaymentState.AWAITING_CUSTOMER_CONFIRMATION) {
+      try {
+        const provRes = await SnippePaymentProvider.checkPaymentStatus(pa.provider_tx_ref || pa.idempotency_key);
+        if (provRes && provRes.status) {
+          const mapped = mapProviderStatusToPaymentState(provRes.status);
+          if (mapped === PaymentState.PROVIDER_SUCCESS) {
+            paymentState = PaymentState.PROVIDER_SUCCESS;
+            // Update Participant to PAID asynchronously
+            await pool.query(
+              `UPDATE split_participants SET status = 'PAID', amount_paid = allocation_amount, paid_at = NOW(), payment_ref = $1 WHERE id = $2`,
+              [pa.provider_tx_ref || 'CONFIRMED', pa.split_participant_id]
+            );
+            await pool.query(`UPDATE payment_attempts SET status = 'SUCCESS', payment_status = 'PROVIDER_SUCCESS', completed_at = NOW() WHERE id = $1`, [pa.id]);
+          }
+        }
+      } catch (err) {
+        console.warn('Status lookup fallback error:', err.message);
+      }
+    }
+
+    // Check settlement record status if available
+    const setRes = await pool.query('SELECT settlement_status FROM settlement_records WHERE payment_id = $1 ORDER BY created_at DESC LIMIT 1', [String(pa.id)]);
+    if (setRes.rows.length > 0) {
+      settlementState = setRes.rows[0].settlement_status;
+    }
+
+    res.json({
+      paymentStatus: paymentState,
+      providerStatus: pa.status,
+      settlementStatus: settlementState,
+      reference: pa.provider_tx_ref || pa.idempotency_key || paymentId,
+      updatedAt: pa.completed_at || pa.requested_at || new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// FimiPay Authoritative Webhook Endpoint
+app.post(['/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (req, res) => {
+  const rawBuffer = req.body;
+  const sigHeader = req.headers['x-fimipay-signature'] || req.headers['x-webhook-signature'];
+
+  const isValid = FimiPayProvider.verifyWebhookSignature(rawBuffer, sigHeader);
+  if (!isValid) {
+    console.warn('⚠️ FimiPay webhook signature verification failed.');
+    return res.status(401).json({ error: 'Invalid webhook signature.' });
+  }
+
+  let eventPayload;
+  try {
+    eventPayload = JSON.parse(rawBuffer.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON payload.' });
+  }
+
+  const eventId = eventPayload.event_id || eventPayload.id || `fimi_evt_${Date.now()}`;
+  const eventType = eventPayload.event_type || eventPayload.type || 'payment.success';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Strict Idempotency Check in payment_webhook_events
+    const existingEvt = await client.query('SELECT 1 FROM payment_webhook_events WHERE provider = $1 AND provider_event_id = $2', ['FIMIPAY', eventId]);
+    if (existingEvt.rows.length > 0) {
+      await client.query('COMMIT');
+      client.release();
+      return res.status(200).json({ received: true, note: 'Event already processed' });
+    }
+
+    await client.query(
+      `INSERT INTO payment_webhook_events (provider, provider_event_id, event_type, payload, signature_verified, processing_status, processed_at)
+       VALUES ('FIMIPAY', $1, $2, $3, true, 'PROCESSED', NOW())`,
+      [eventId, eventType, eventPayload]
+    );
+
+    const participantId = eventPayload.metadata?.participant_id || eventPayload.participant_id;
+    const providerTxRef = eventPayload.reference || eventPayload.transaction_id;
+
+    if (participantId) {
+      await client.query(
+        `UPDATE split_participants SET status = 'PAID', amount_paid = allocation_amount, paid_at = NOW(), payment_ref = $1 WHERE id = $2`,
+        [providerTxRef || 'FIMI-CONFIRMED', participantId]
+      );
+      await client.query(
+        `UPDATE payment_attempts SET status = 'SUCCESS', payment_status = 'PROVIDER_SUCCESS', completed_at = NOW() WHERE split_participant_id = $1 AND status = 'PENDING'`,
+        [participantId]
+      );
+    }
+
+    await client.query('COMMIT');
+    client.release();
+    res.status(200).json({ received: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    console.error('Error processing FimiPay webhook:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Real-Time Snippe Webhook Endpoint (HMAC Signed & Idempotent)
 app.post('/api/payments/webhooks/snippe', async (req, res) => {
   const rawBuffer = req.body;
   const sigHeader = req.headers['x-webhook-signature'] || req.headers['x-snippe-signature'];
@@ -1127,8 +1265,8 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Strict Idempotency Check
-    const existingEvt = await client.query('SELECT 1 FROM webhook_events WHERE event_id = $1', [eventId]);
+    // Strict Idempotency Check in payment_webhook_events
+    const existingEvt = await client.query('SELECT 1 FROM payment_webhook_events WHERE provider = $1 AND provider_event_id = $2', ['SNIPPE', eventId]);
     if (existingEvt.rows.length > 0) {
       await client.query('COMMIT');
       client.release();
@@ -1136,8 +1274,8 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
     }
 
     await client.query(
-      `INSERT INTO webhook_events (event_id, provider, event_type, payload)
-       VALUES ($1, 'SNIPPE', $2, $3)`,
+      `INSERT INTO payment_webhook_events (provider, provider_event_id, event_type, payload, signature_verified, processing_status, processed_at)
+       VALUES ('SNIPPE', $1, $2, $3, true, 'PROCESSED', NOW())`,
       [eventId, eventType, eventPayload]
     );
 
@@ -1163,7 +1301,7 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
         // Update PaymentAttempt to SUCCESS
         await client.query(
           `UPDATE payment_attempts
-           SET status = 'SUCCESS', completed_at = NOW()
+           SET status = 'SUCCESS', payment_status = 'PROVIDER_SUCCESS', completed_at = NOW()
            WHERE split_participant_id = $1 AND status = 'PENDING'`,
           [participantId]
         );
@@ -1190,23 +1328,16 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
           [totalPaid, settlementPercent, newStatus, splitId]
         );
 
-        // AUTOMATED SETTLEMENT DISPATCH: If split is 100% SETTLED, trigger payout to merchant
-        if (newStatus === 'SETTLED') {
-          console.log(`🎉 Split ${splitId} reached 100% SETTLED! Dispatching Automated Snippe Payout...`);
-          const payoutRes = await SnippePaymentProvider.sendPayout({
-            splitId: splitId,
-            amount: totalPaid,
-            channel: 'mobile',
-            recipientPhone: '255754123456',
-            recipientName: 'Golden Hotel / Verified Merchant'
-          });
-
-          await client.query(
-            `INSERT INTO payout_records (split_id, amount, fee, channel, recipient_reference, provider_payout_id, status)
-             VALUES ($1, $2, 1500, 'mobile', '255754123456', $3, $4)`,
-            [splitId, totalPaid, payoutRes.payoutId, payoutRes.status]
-          );
-        }
+        // Trigger Settlement Router for recipient destination payout
+        await SettlementRouter.initiateSettlement(client, {
+          paymentId: participantId,
+          entityType: 'SPLIT',
+          entityId: splitId,
+          amount: totalPaid,
+          currency: 'TZS',
+          destinationSnapshot: null,
+          provider: 'SNIPPE'
+        });
       }
     }
 
@@ -1714,4 +1845,5 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
 
 app.listen(port, () => {
   console.log(`⚡ LUMO Split PostgreSQL Backend API running on http://localhost:${port}`);
+  PaymentReconciliationService.start(pool, 45000);
 });
