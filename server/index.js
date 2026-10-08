@@ -5,8 +5,8 @@ import pg from 'pg';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { SnippePaymentProvider } from './snippeProvider.js';
-import { FimiPayProvider } from './fimipayProvider.js';
 import { PaymentRoutingService } from './paymentRoutingService.js';
+import { SettlementRouter } from './settlementRouter.js';
 import { createAdminRouter } from './adminRoutes.js';
 
 dotenv.config();
@@ -15,7 +15,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use('/api/public/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
 app.use('/api/splits/ref/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
-app.use(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_order'], rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }));
+app.use(['/api/payments/snippe/initiate'], rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }));
 const port = process.env.PORT || 3001;
 const dbUrl = process.env.DATABASE_URL;
 
@@ -24,10 +24,10 @@ const pool = new pg.Pool({
 });
 
 app.use(cors());
-// Raw body parser for Snippe & FimiPay HMAC webhook verification
+// Raw body parser for Snippe HMAC webhook verification
 app.use('/api/payments/webhooks/snippe', express.raw({ type: 'application/json' }));
-app.use('/api/payments/webhooks/fimipay', express.raw({ type: 'application/json' }));
-app.use('/webhooks/fimipay', express.raw({ type: 'application/json' }));
+app.use('/api/webhooks/snippe', express.raw({ type: 'application/json' }));
+app.use('/webhooks/snippe', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // Mount Admin API Router
@@ -1346,6 +1346,44 @@ app.get('/api/audit-logs', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+  // Payment Links Resolution (GET /api/payment-links/:token, /api/public/payment-links/:token)
+app.get(['/api/payment-links/:token', '/api/public/payment-links/:token'], async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { rows } = await pool.query(
+      `SELECT pl.*, pd.display_name AS dest_display_name, pd.type AS dest_type, pd.provider AS dest_provider, pd.phone_number AS dest_phone, pd.bank_name AS dest_bank, pd.account_number AS dest_account, pd.beneficiary_full_name AS dest_beneficiary
+       FROM payment_links pl
+       LEFT JOIN payment_destinations pd ON pl.destination_id = pd.id
+       WHERE pl.public_token = $1 OR pl.id::text = $1`,
+      [token]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Payment link not found.' });
+    }
+
+    const link = rows[0];
+    const statusCheck = PaymentRoutingService.evaluateLinkStatus(link);
+    if (!statusCheck.isValid) {
+      return res.status(400).json({ error: statusCheck.error, status: link.status });
+    }
+
+    res.json({
+      id: link.id,
+      public_token: link.public_token,
+      title: link.title,
+      amount: parseInt(link.amount, 10),
+      currency: link.currency,
+      status: link.status,
+      expiration_mode: link.expiration_mode,
+      expires_at: link.expires_at,
+      destination_snapshot: link.destination_snapshot,
+      created_at: link.created_at
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/audit-logs', async (req, res) => {
   try {
@@ -1483,196 +1521,175 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
     [totalPaid, settlementPercent, newStatus, splitId]
   );
 
+  // Trigger automated payout settlement if destination snapshot exists
+  try {
+    const destRes = await client.query(
+      `SELECT destination_snapshot FROM split_participants WHERE id = $1 
+       UNION ALL 
+       SELECT destination_snapshot FROM splits WHERE id = $2`,
+      [pId, splitId]
+    );
+    let dSnapshot = null;
+    for (const r of destRes.rows) {
+      if (r.destination_snapshot && r.destination_snapshot.enabled) {
+        dSnapshot = r.destination_snapshot;
+        break;
+      }
+    }
+    if (dSnapshot) {
+      await SettlementRouter.processAutomatedSettlement(client, {
+        paymentId: providerTxRef || orderId,
+        participantId: pId,
+        splitId,
+        amount: finalPaid,
+        destinationSnapshot: dSnapshot
+      });
+    }
+  } catch (settleErr) {
+    console.warn('[Automated Settlement Notice]:', settleErr.message);
+  }
+
   return { splitId, participantId: pId, settlementPercent, status: newStatus };
 }
 
-// 1. Create Payment Order (POST /payment/create_order)
-app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_order'], async (req, res) => {
+
+
+// Snippe Collection Initiation API (POST /api/payments/snippe/initiate)
+app.post('/api/payments/snippe/initiate', async (req, res) => {
   const client = await pool.connect();
   try {
-    const {
-      split_participant_id,
-      buyer_phone,
-      phone,
-      amount,
-      order_id,
-      currency = 'TZS',
-      buyer_name,
-      buyer_email,
-      payment_method = 'mobile',
-      redirect_url,
-      test_outcome
-    } = req.body;
-
-    const targetPhone = buyer_phone || phone;
-    let targetAmount = amount;
-    let participantId = split_participant_id || null;
-
-    if (participantId) {
-      const pRes = await client.query(
-        `SELECT p.*, s.title AS split_title, s.id AS split_id
-         FROM split_participants p
-         JOIN splits s ON p.split_id = s.id
-         WHERE p.id = $1`,
-        [participantId]
-      );
-
-      if (pRes.rows.length === 0) { return res.status(404).json({ error: 'Participant not found.' }); }
-      if (pRes.rows[0].status === 'PAID') { return res.status(400).json({ error: 'Already paid.' }); }
-      targetAmount = parseInt(pRes.rows[0].allocation_amount, 10);
+    const { split_participant_id, phone, amount, idempotency_key } = req.body;
+    if (!split_participant_id || !phone) {
+      return res.status(400).json({ error: 'split_participant_id and phone are required.' });
     }
 
-    if (!participantId) { return res.status(400).json({ error: 'split_participant_id is required.' }); }
+    const pRes = await client.query(
+      `SELECT p.*, s.title AS split_title, s.id AS split_id
+       FROM split_participants p
+       JOIN splits s ON p.split_id = s.id
+       WHERE p.id = $1`,
+      [split_participant_id]
+    );
 
-    if (!targetPhone || !targetAmount) {
-      return res.status(400).json({ error: 'buyer_phone (or phone) and amount are required.' });
-    }
+    if (pRes.rows.length === 0) return res.status(404).json({ error: 'Participant not found.' });
+    if (pRes.rows[0].status === 'PAID') return res.status(400).json({ error: 'Already paid.' });
 
-    const orderId = (order_id || `fp_${participantId || 'ord'}_${Date.now()}`).slice(0, 64);
+    const participant = pRes.rows[0];
+    const targetAmount = amount || participant.allocation_amount;
+    const idemKey = SnippePaymentProvider.formatIdempotencyKey(idempotency_key || `pay_${participant.id.slice(0, 18)}`);
 
-    const fpResult = await FimiPayProvider.createOrder({
-      buyer_phone: targetPhone,
+    const snippeResult = await SnippePaymentProvider.initiatePayment({
       amount: targetAmount,
-      order_id: orderId,
-      currency,
-      buyer_name,
-      buyer_email,
-      payment_method,
-      redirect_url,
-      test_outcome: ['sandbox', 'test', 'development'].includes(String(process.env.FIMIPAY_ENVIRONMENT || '').toLowerCase()) ? test_outcome : undefined
+      phone,
+      currency: 'TZS',
+      splitId: participant.split_id,
+      participantId: participant.id,
+      participantName: participant.name,
+      idempotencyKey: idemKey
     });
 
-    // Save intent and attempt in DB if tied to a participant
-    if (participantId) {
-      try {
-        await client.query('UPDATE split_participants SET payment_ref = $1 WHERE id = $2', [orderId, participantId]);
-        const pCheck = await client.query('SELECT split_id FROM split_participants WHERE id = $1', [participantId]);
-        if (pCheck.rows.length > 0) {
-          const splitId = pCheck.rows[0].split_id;
-          try {
-            await client.query(
-              `INSERT INTO payment_intents (split_participant_id, split_id, expected_amount, currency, status, idempotency_key, metadata)
-               VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)`,
-              [participantId, splitId, targetAmount, currency, orderId, { buyer_phone: targetPhone, payment_method }]
-            );
-          } catch (intErr) {
-            console.warn('[FimiPay Intent Insert Notice]:', intErr.message);
-          }
-
-          try {
-            await client.query(
-              `INSERT INTO payment_attempts (split_participant_id, amount, provider, provider_tx_ref, status, payment_method, idempotency_key, requested_at)
-               VALUES ($1, $2, 'FIMIPAY', $3, 'PENDING', $4, $5, NOW())`,
-              [participantId, targetAmount, fpResult.orderId, payment_method, orderId]
-            );
-          } catch (attErr) {
-            console.warn('[FimiPay Attempt Insert Notice]:', attErr.message);
-          }
-        }
-      } catch (dbErr) {
-        console.warn('[FimiPay DB Notice]:', dbErr.message);
-      }
+    await client.query('UPDATE split_participants SET payment_ref = $1 WHERE id = $2', [snippeResult.providerTxRef, participant.id]);
+    try {
+      await client.query(
+        `INSERT INTO payment_attempts (split_participant_id, amount, provider, provider_tx_ref, status, payment_method, idempotency_key, requested_at)
+         VALUES ($1, $2, 'SNIPPE', $3, 'PENDING', 'mobile_money', $4, NOW())`,
+        [participant.id, targetAmount, snippeResult.providerTxRef, idemKey]
+      );
+    } catch (attErr) {
+      console.warn('[Snippe Attempt Notice]:', attErr.message);
     }
 
-    res.status(200).json({
+    res.json({
       success: true,
-      order_id: fpResult.orderId,
-      payment_status: fpResult.paymentStatus,
-      payment_gateway_url: fpResult.paymentGatewayUrl,
-      data: fpResult.data
+      providerTxRef: snippeResult.providerTxRef,
+      status: snippeResult.status,
+      message: snippeResult.message
     });
   } catch (err) {
-    console.error('Error creating FimiPay order:', err);
-    res.status(500).json({ error: 'Could not create payment order.' });
+    console.error('Error initiating Snippe payment:', err);
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// 2. Poll Order Status (POST /payment/order_status)
-app.post(['/api/payments/fimipay/order-status', '/api/payments/fimipay/order_status'], async (req, res) => {
+// Snippe Webhook Handler (POST /api/webhooks/snippe, /webhooks/snippe)
+app.post(['/api/payments/webhooks/snippe', '/api/webhooks/snippe', '/webhooks/snippe'], async (req, res) => {
+  const rawBuffer = req.body;
+  const isValid = SnippePaymentProvider.verifyWebhookSignature(rawBuffer, req);
+  if (!isValid) {
+    console.warn('⚠️ Snippe Webhook signature verification failed.');
+    return res.status(401).json({ error: 'Invalid webhook signature.' });
+  }
+
+  let eventPayload;
   try {
-    const { order_id } = req.body;
-    if (!order_id) return res.status(400).json({ error: 'order_id is required' });
+    eventPayload = JSON.parse(rawBuffer.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON payload.' });
+  }
 
-    const fpResult = await FimiPayProvider.getOrderStatus(order_id);
+  console.log('[Snippe Webhook Received]:', eventPayload);
 
-    if (fpResult.isPaid) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await applySuccessfulPayment(client, { orderId: order_id, amountPaid: fpResult.data?.amount, providerTxRef: order_id });
-        await client.query('COMMIT');
-      } catch (dbErr) {
-        await client.query('ROLLBACK');
-        console.error('Error updating DB on FimiPay order success:', dbErr);
-      } finally {
-        client.release();
-      }
+  const eventId = eventPayload.event_id || eventPayload.id || 'snp_evt_' + crypto.createHash('sha256').update(rawBuffer).digest('hex');
+  const eventType = (eventPayload.event_type || eventPayload.event || eventPayload.type || '').toLowerCase();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existingEvt = await client.query('SELECT 1 FROM webhook_events WHERE provider = \'SNIPPE\' AND event_id = $1', [eventId]);
+    if (existingEvt.rows.length > 0) {
+      await client.query('COMMIT');
+      return res.status(200).json({ received: true, note: 'Event already processed' });
     }
 
-    res.json(fpResult);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    await client.query(
+      `INSERT INTO webhook_events (event_id, provider, event_type, payload)
+       VALUES ($1, 'SNIPPE', $2, $3)
+       ON CONFLICT (provider, event_id) DO NOTHING`,
+      [eventId, eventType, eventPayload]
+    );
 
-// 3. List Recent Transactions (POST /transactions/readbyId)
-app.post(['/api/payments/fimipay/transactions', '/api/payments/fimipay/transactions/readbyId'], async (req, res) => {
-  try {
-    const fpResult = await FimiPayProvider.getTransactions();
-    res.json(fpResult);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    const dataObj = eventPayload.data || eventPayload;
+    const ref = dataObj.reference || dataObj.external_reference || eventPayload.order_id;
+    const metadata = dataObj.metadata || {};
+    const participantId = metadata.participant_id || dataObj.participant_id;
 
-// 4. Merchant Balance (GET /balance)
-app.get(['/api/payments/fimipay/balance', '/api/payments/fimipay/balances'], async (req, res) => {
-  try {
-    const currency = req.query.currency || 'TZS';
-    const fpResult = await FimiPayProvider.getBalance(currency);
-    res.json(fpResult);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 5. Request Payout / Withdrawal (POST /payouts/create)
-app.post(['/api/payments/fimipay/payouts', '/api/payments/fimipay/payouts/create'], async (req, res) => {
-  try {
-    const { amount, method, account_number, account_name, currency = 'TZS', fee_handling = 'deduct' } = req.body;
-    if (!amount || !method || !account_number) {
-      return res.status(400).json({ error: 'amount, method, and account_number are required.' });
+    if (['payment.completed', 'payment.success'].includes(eventType)) {
+      await applySuccessfulPayment(client, {
+        orderId: ref,
+        participantId,
+        amountPaid: dataObj.amount?.value || dataObj.amount,
+        providerTxRef: ref
+      });
+    } else if (eventType === 'payout.completed') {
+      await client.query(
+        `UPDATE settlements SET status = 'SETTLED', completed_at = NOW(), updated_at = NOW() WHERE provider_reference = $1 OR split_id = $2`,
+        [ref, metadata.split_id]
+      );
+    } else if (eventType === 'payout.failed') {
+      await client.query(
+        `UPDATE settlements SET status = 'FAILED', failure_reason = $1, updated_at = NOW() WHERE provider_reference = $2 OR split_id = $3`,
+        [dataObj.failure_reason || 'Payout failed', ref, metadata.split_id]
+      );
+    } else if (eventType === 'payout.reversed') {
+      await client.query(
+        `UPDATE settlements SET status = 'REVERSED', failure_reason = 'Payout was reversed', updated_at = NOW() WHERE provider_reference = $1 OR split_id = $2`,
+        [ref, metadata.split_id]
+      );
     }
 
-    const fpResult = await FimiPayProvider.createPayout({
-      amount,
-      method,
-      account_number,
-      account_name,
-      currency,
-      fee_handling
-    });
-
-    res.json(fpResult);
+    await client.query('COMMIT');
+    res.status(200).json({ received: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error processing Snippe webhook:', err);
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  } finally {
+    client.release();
   }
 });
-
-// 6. Poll Payout Status (GET /payouts/status/:withdrawalId)
-app.get('/api/payments/fimipay/payouts/status/:withdrawalId', async (req, res) => {
-  try {
-    const { withdrawalId } = req.params;
-    const fpResult = await FimiPayProvider.getPayoutStatus(withdrawalId);
-    res.json(fpResult);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Mandatory Webhook Handler (POST /, /api/payments/webhooks/fimipay, /webhooks/fimipay)
 app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (req, res) => {
   const rawBuffer = req.body;
   const sigHeader =

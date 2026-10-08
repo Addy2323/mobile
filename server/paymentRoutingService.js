@@ -1,10 +1,77 @@
-// LUMO Split - Reusable Payment Routing Service
+// LUMO Split - Reusable Payment Routing Service & Provider Capability Engine
+
+export class ProviderCapabilityService {
+  /**
+   * Check if a provider supports automated payouts for a specific destination type
+   */
+  static isPayoutSupported(provider = 'SNIPPE', destinationType) {
+    let p = String(provider).toUpperCase();
+    if (['MOBILE_MONEY', 'LIPA_NAMBA', 'DEFAULT', 'PHONE'].includes(p)) p = 'SNIPPE';
+    const type = String(destinationType).toUpperCase();
+
+    if (p === 'SNIPPE') {
+      switch (type) {
+        case 'PHONE':
+        case 'MOBILE_MONEY':
+        case 'BANK_ACCOUNT':
+          return true;
+        case 'LIPA_NUMBER':
+        case 'QR':
+        case 'CARD':
+        default:
+          return false;
+      }
+    }
+
+    if (p === 'FIMIPAY') {
+      return type === 'PHONE' || type === 'MOBILE_MONEY';
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a provider supports a specific payment collection method
+   */
+  static isCollectionSupported(provider = 'SNIPPE', paymentMethod) {
+    let p = String(provider).toUpperCase();
+    if (['MOBILE_MONEY', 'DEFAULT'].includes(p)) p = 'SNIPPE';
+    const m = String(paymentMethod).toLowerCase();
+
+    if (p === 'SNIPPE') {
+      return ['mobile', 'mobile_money', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(m);
+    }
+
+    if (p === 'FIMIPAY') {
+      return ['mobile', 'card', 'bank'].includes(m);
+    }
+
+    return true;
+  }
+
+  /**
+   * Validate destination capability and throw user-friendly error if unsupported
+   */
+  static validateDestinationCapability(provider = 'SNIPPE', destinationData) {
+    const type = (destinationData?.type || 'PHONE').toUpperCase();
+    const supported = this.isPayoutSupported(provider, type);
+
+    if (!supported) {
+      if (['LIPA_NUMBER', 'QR', 'CARD'].includes(type)) {
+        throw new Error(`The selected payment destination (${type}) is not currently supported for automated payout disbursement via ${provider}. Please select a Mobile Money or Bank Account destination.`);
+      }
+      throw new Error(`Destination type ${type} is unsupported by provider ${provider}.`);
+    }
+
+    return true;
+  }
+}
 
 export class PaymentRoutingService {
   /**
    * Validate destination parameters according to strict payment rules.
    */
-  static validateDestination(data) {
+  static validateDestination(data, options = {}) {
     const { type, provider, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name } = data;
 
     if (!type) {
@@ -14,6 +81,11 @@ export class PaymentRoutingService {
     const validTypes = ['PHONE', 'LIPA_NUMBER', 'BANK_ACCOUNT', 'QR', 'CARD', 'VERIFIED_MERCHANT'];
     if (!validTypes.includes(type.toUpperCase())) {
       throw new Error(`Unsupported payment destination type: ${type}. Must be one of ${validTypes.join(', ')}`);
+    }
+
+    // Explicit capability check if requested during payout dispatch
+    if (options.checkCapability) {
+      ProviderCapabilityService.validateDestinationCapability(provider || 'SNIPPE', data);
     }
 
     switch (type.toUpperCase()) {
@@ -30,8 +102,8 @@ export class PaymentRoutingService {
         return { ...data, lipa_number: lipa_number.trim() };
 
       case 'BANK_ACCOUNT':
-        if (!bank_name || !['NMB', 'CRDB', 'OTHER_BANK'].includes(bank_name.toUpperCase())) {
-          throw new Error('Supported bank (NMB, CRDB) is required for BANK_ACCOUNT destination.');
+        if (!bank_name || !['NMB', 'CRDB', 'OTHER_BANK', 'NBC', 'ABSA'].includes(bank_name.toUpperCase())) {
+          throw new Error('Supported bank (NMB, CRDB, etc.) is required for BANK_ACCOUNT destination.');
         }
         if (!account_number || !account_number.trim()) {
           throw new Error('Account number is required for BANK_ACCOUNT destination.');
@@ -69,7 +141,7 @@ export class PaymentRoutingService {
         enabled: false,
         destinationId: null,
         type: 'DEFAULT_FALLBACK',
-        provider: 'FIMIPAY_LUMO_DEFAULT',
+        provider: 'SNIPPE_LUMO_DEFAULT',
         displayName: 'LUMO Platform Collection Account',
         maskedValue: 'Default Collection Account',
         beneficiaryName: 'LUMO Split Collection',
@@ -102,7 +174,7 @@ export class PaymentRoutingService {
       enabled: true,
       destinationId: destination.id || 'dest_123',
       type: type,
-      provider: destination.provider || 'MOBILE_MONEY',
+      provider: destination.provider || 'SNIPPE',
       bankName: destination.bank_name || null,
       accountNumberMasked: maskedValue,
       phoneNumber: destination.phone_number || null,
@@ -157,7 +229,7 @@ export class PaymentRoutingService {
     if (!snapshot || snapshot.isFallback) {
       return {
         settlementStatus: 'SETTLED',
-        settlementNote: 'Collected via default LUMO/FimiPay collection account.'
+        settlementNote: 'Collected via default LUMO/Snippe collection account.'
       };
     }
 

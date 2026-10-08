@@ -17,12 +17,12 @@ type PaymentViewProps = {
   onComplete: () => void;
 };
 
-type PaymentMethod = 'fimipay' | 'mpesa' | 'tigo' | 'airtel' | 'bank' | 'card';
+type PaymentMethod = 'snippe' | 'mpesa' | 'tigo' | 'airtel' | 'bank' | 'card';
 
 export default function PaymentView({ split, participant: initialParticipant, onBack, onComplete }: PaymentViewProps) {
   const [participant, setParticipant] = useState<Participant>(initialParticipant);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [method, setMethod] = useState<PaymentMethod>('fimipay');
+  const [method, setMethod] = useState<PaymentMethod>('snippe');
   const [phoneNumber, setPhoneNumber] = useState(initialParticipant.phone || '');
   const [stage, setStage] = useState<'select' | 'processing' | 'success' | 'failed'>('select');
   const [paymentRef, setPaymentRef] = useState('');
@@ -41,7 +41,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
   }, [split.merchant_id]);
 
   const methods: { id: PaymentMethod; label: string; icon: typeof Smartphone; desc: string }[] = [
-    { id: 'fimipay', label: 'Mobile money', icon: Smartphone, desc: 'Instant mobile money & hosted checkout' },
+    { id: 'snippe', label: 'Mobile money (Snippe)', icon: Smartphone, desc: 'Instant mobile money push & automated settlement' },
   ];
 
   useEffect(() => {
@@ -72,31 +72,25 @@ export default function PaymentView({ split, participant: initialParticipant, on
     const prevStage = stage;
     setStage('processing');
 
-    const txRef = `FMP-TX-${Date.now().toString().slice(-7)}`;
+    const txRef = `SNP-TX-${Date.now().toString().slice(-7)}`;
     setPaymentRef(txRef);
 
     try {
       {
-        const res = await fetch('/api/payments/fimipay/create-order', {
+        const res = await fetch('/api/payments/snippe/initiate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             split_participant_id: participant.id,
-            buyer_phone: phoneNumber,
+            phone: phoneNumber,
             amount: participant.allocation_amount,
-            order_id: `idem_${Date.now()}`,
-            buyer_name: participant.name,
-            payment_method: method === 'card' ? 'card' : method === 'bank' ? 'bank' : 'mobile'
+            idempotency_key: `idem_${Date.now()}`
           })
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok) {
           window.alert(data.error || 'Payment could not be started. Please try again.');
           setStage(prevStage);
-          return;
-        }
-        if (data.payment_gateway_url) {
-          window.location.href = data.payment_gateway_url;
           return;
         }
       }
@@ -253,7 +247,7 @@ export default function PaymentView({ split, participant: initialParticipant, on
       </div>
 
       {/* Phone input for mobile money */}
-      {method === 'fimipay' && (
+      {method === 'snippe' && (
         <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-5">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Mobile money phone number

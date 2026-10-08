@@ -1,4 +1,4 @@
-export type PaymentProviderId = 'mpesa' | 'airtel' | 'mixx' | 'halopesa' | 'bank' | 'card' | 'snippe' | 'fimipay';
+export type PaymentProviderId = 'mpesa' | 'airtel' | 'mixx' | 'halopesa' | 'bank' | 'card' | 'snippe';
 
 export type PaymentRequest = {
   amount: number;
@@ -28,7 +28,6 @@ export interface PaymentProvider {
 }
 
 export const paymentProviders: Record<PaymentProviderId, { id: PaymentProviderId; label: string; desc: string }> = {
-  fimipay: { id: 'fimipay', label: 'FimiPay Merchant API v1', desc: 'FimiPay instant mobile money push & hosted checkout' },
   snippe: { id: 'snippe', label: 'Snippe Payment Engine', desc: 'Direct Snippe mobile money push & automated settlement' },
   mpesa: { id: 'mpesa', label: 'M-Pesa (Snippe)', desc: 'Vodacom mobile money via Snippe' },
   airtel: { id: 'airtel', label: 'Airtel Money (Snippe)', desc: 'Airtel mobile money via Snippe' },
@@ -44,78 +43,6 @@ function generateTxRef(): string {
     .padStart(3, '0')}`;
 }
 
-export class FimiPayPaymentProviderClient implements PaymentProvider {
-  readonly id = 'fimipay';
-  readonly label = 'FimiPay Merchant API v1';
-
-  async initiatePayment(request: PaymentRequest): Promise<PaymentResult> {
-    const API_BASE = '/api';
-
-    try {
-      const res = await fetch(`${API_BASE}/payments/fimipay/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          split_participant_id: request.participantId,
-          buyer_phone: request.phone,
-          amount: request.amount,
-          order_id: request.idempotencyKey,
-          buyer_name: request.participantName,
-          buyer_email: request.buyerEmail,
-          payment_method: request.provider === 'card' ? 'card' : request.provider === 'bank' ? 'bank' : 'mobile',
-          redirect_url: request.redirectUrl
-        })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        return {
-          status: 'FAILED',
-          txRef: generateTxRef(),
-          failureCode: 'FIMIPAY_ORDER_FAILED',
-          failureMessage: errData.error || 'FimiPay order creation failed.'
-        };
-      }
-
-      const data = await res.json();
-      return {
-        status: (data.payment_status === 'SUCCESS' ? 'SUCCESS' : 'PENDING'),
-        txRef: data.order_id || generateTxRef(),
-        paymentGatewayUrl: data.payment_gateway_url || undefined
-      };
-    } catch {
-      return {
-        status: 'PENDING',
-        txRef: generateTxRef()
-      };
-    }
-  }
-
-  async checkOrderStatus(orderId: string): Promise<PaymentResult> {
-    const API_BASE = '/api';
-
-    try {
-      const res = await fetch(`${API_BASE}/payments/fimipay/order-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId })
-      });
-
-      if (!res.ok) {
-        return { status: 'PENDING', txRef: orderId };
-      }
-
-      const data = await res.json();
-      return {
-        status: data.isPaid ? 'SUCCESS' : 'PENDING',
-        txRef: orderId
-      };
-    } catch {
-      return { status: 'PENDING', txRef: orderId };
-    }
-  }
-}
-
 export class SnippePaymentProviderClient implements PaymentProvider {
   readonly id = 'snippe';
   readonly label = 'Snippe Payment Provider';
@@ -124,13 +51,14 @@ export class SnippePaymentProviderClient implements PaymentProvider {
     const API_BASE = '/api';
 
     try {
-      const res = await fetch(`${API_BASE}/payments/initiate`, {
+      const res = await fetch(`${API_BASE}/payments/snippe/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           split_participant_id: request.participantId,
           phone: request.phone,
-          payment_method: request.provider
+          amount: request.amount,
+          idempotency_key: request.idempotencyKey
         })
       });
 
@@ -146,11 +74,10 @@ export class SnippePaymentProviderClient implements PaymentProvider {
 
       const data = await res.json();
       return {
-        status: 'PENDING',
+        status: data.status === 'SUCCESS' ? 'SUCCESS' : 'PENDING',
         txRef: data.providerTxRef || generateTxRef()
       };
     } catch {
-      // Fallback for offline/mock scenario
       return {
         status: 'PENDING',
         txRef: generateTxRef()
@@ -190,4 +117,3 @@ export class MockPaymentProvider implements PaymentProvider {
 export function generateIdempotencyKey(): string {
   return `idem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
-

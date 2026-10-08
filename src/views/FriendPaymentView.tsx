@@ -11,7 +11,7 @@ import TrustStrip from '@/components/TrustStrip';
 import StatusBadge from '@/components/StatusBadge';
 import {
   type PaymentProviderId, type PaymentResult,
-  paymentProviders, MockPaymentProvider, SnippePaymentProviderClient, FimiPayPaymentProviderClient, generateIdempotencyKey,
+  paymentProviders, MockPaymentProvider, SnippePaymentProviderClient, generateIdempotencyKey,
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
 
@@ -27,7 +27,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [split, setSplit] = useState<Split | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [provider, setProvider] = useState<PaymentProviderId>('fimipay');
+  const [provider, setProvider] = useState<PaymentProviderId>('snippe');
   const [phone, setPhone] = useState('');
   const [payAmount, setPayAmount] = useState('');
   const [countdown, setCountdown] = useState(120);
@@ -137,20 +137,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
         }
       }
 
-      // 2. Check FimiPay status directly
-      if (checkOrderId && provider === 'fimipay') {
-        const fpClient = new FimiPayPaymentProviderClient();
-        const fpRes = await fpClient.checkOrderStatus(checkOrderId);
-        if (fpRes.status === 'SUCCESS') {
-          stopCountdown();
-          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
-          setStage('success');
-          setIsCheckingStatus(false);
-          return true;
-        }
-      }
-
-      // 3. Fallback: query Supabase directly
+      // 2. Fallback: query Supabase directly
       const { data: dbPart } = await supabase
         .from('split_participants')
         .select('status, amount_paid, allocation_amount')
@@ -186,19 +173,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     startCountdown();
 
     const idempotencyKey = generateIdempotencyKey();
-    const providerLabel = paymentProviders[provider]?.label || 'FimiPay Merchant API v1';
-
-    let providerClient;
-    if (provider === 'fimipay') {
-      providerClient = new FimiPayPaymentProviderClient();
-    } else if (['snippe', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(provider)) {
-      providerClient = new SnippePaymentProviderClient();
-    } else {
-      stopCountdown();
-      setError('This payment method is not available.');
-      setStage('select');
-      return;
-    }
+    const providerClient = new SnippePaymentProviderClient();
 
     const result = await providerClient.initiatePayment({
       amount: payAmountNum,
@@ -400,7 +375,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
 
       <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <h3 className="mb-3 text-sm font-bold text-slate-900">Choose provider</h3>
-        <div className="space-y-2">{Object.values(paymentProviders).filter((p) => p.id === 'fimipay').map((p) => { const Icon = providerIcon(p.id); return <button key={p.id} onClick={() => setProvider(p.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition ${provider === p.id ? 'border-primary-300 bg-primary-50/50' : 'border-slate-100 hover:border-slate-200'}`}><div className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider === p.id ? 'bg-primary-100 text-primary-600' : 'bg-slate-50 text-slate-400'}`}><Icon className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-semibold text-slate-900">{p.label}</p><p className="text-xs text-slate-400">{p.desc}</p></div><div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${provider === p.id ? 'border-primary-600 bg-primary-600' : 'border-slate-200'}`}>{provider === p.id && <Check className="h-3 w-3 text-white" strokeWidth={3} />}</div></button>; })}</div>
+        <div className="space-y-2">{Object.values(paymentProviders).filter((p) => p.id === 'snippe').map((p) => { const Icon = providerIcon(p.id); return <button key={p.id} onClick={() => setProvider(p.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition ${provider === p.id ? 'border-primary-300 bg-primary-50/50' : 'border-slate-100 hover:border-slate-200'}`}><div className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider === p.id ? 'bg-primary-100 text-primary-600' : 'bg-slate-50 text-slate-400'}`}><Icon className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-semibold text-slate-900">{p.label}</p><p className="text-xs text-slate-400">{p.desc}</p></div><div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${provider === p.id ? 'border-primary-600 bg-primary-600' : 'border-slate-200'}`}>{provider === p.id && <Check className="h-3 w-3 text-white" strokeWidth={3} />}</div></button>; })}</div>
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
