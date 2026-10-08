@@ -15,6 +15,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use('/api/public/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
 app.use('/api/splits/ref/', rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
+app.use(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_order'], rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }));
 const port = process.env.PORT || 3001;
 const dbUrl = process.env.DATABASE_URL;
 
@@ -1415,7 +1416,11 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   if (pRes.rows.length === 0) return null;
 
   const participant = pRes.rows[0];
+  if (participant.status === 'PAID') return { splitId: participant.split_id, participantId: pId, alreadyPaid: true };
   const splitId = participant.split_id;
+  if (amountPaid != null && Number(amountPaid) !== Number(participant.allocation_amount)) {
+    console.warn(`[FimiPay] Amount mismatch for ${orderId}: provider ${amountPaid}, expected ${participant.allocation_amount}`);
+  }
   const finalPaid = amountPaid || participant.allocation_amount;
 
   // Update Participant status
@@ -1490,10 +1495,12 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
         [participantId]
       );
 
-      if (pRes.rows.length > 0) {
-        targetAmount = parseInt(pRes.rows[0].allocation_amount, 10);
-      }
+      if (pRes.rows.length === 0) { client.release(); return res.status(404).json({ error: 'Participant not found.' }); }
+      if (pRes.rows[0].status === 'PAID') { client.release(); return res.status(400).json({ error: 'Already paid.' }); }
+      targetAmount = parseInt(pRes.rows[0].allocation_amount, 10);
     }
+
+    if (!participantId) { client.release(); return res.status(400).json({ error: 'split_participant_id is required.' }); }
 
     if (!targetPhone || !targetAmount) {
       client.release();
@@ -1511,7 +1518,7 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
       buyer_email,
       payment_method,
       redirect_url,
-      test_outcome
+      test_outcome: ['sandbox', 'test', 'development'].includes(String(process.env.FIMIPAY_ENVIRONMENT || '').toLowerCase()) ? test_outcome : undefined
     });
 
     // Save intent and attempt in DB if tied to a participant
@@ -1666,8 +1673,9 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
 
   console.log('[FimiPay Webhook Received]:', eventPayload);
 
-  const eventId = eventPayload.event_id || eventPayload.id || `evt_fp_${Date.now()}`;
-  const eventType = eventPayload.event_type || eventPayload.event || eventPayload.type || 'payment.success';
+  // hardened:fimipay
+  const eventId = eventPayload.event_id || eventPayload.id || 'sha_' + crypto.createHash('sha256').update(rawBuffer).digest('hex');
+  const eventType = eventPayload.event_type || eventPayload.event || eventPayload.type || 'unknown';
 
   const client = await pool.connect();
   try {
@@ -1692,7 +1700,7 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
     const amountPaid = eventPayload.amount || eventPayload.data?.amount;
     const participantId = eventPayload.participant_id || eventPayload.data?.participant_id || eventPayload.metadata?.participant_id;
 
-    if (paymentStatus === 'SUCCESS' || eventType === 'payment.success') {
+    if (paymentStatus === 'SUCCESS' || (!paymentStatus && eventType === 'payment.success')) {
       await applySuccessfulPayment(client, {
         orderId,
         participantId,
