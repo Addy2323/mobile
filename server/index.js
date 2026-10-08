@@ -1712,6 +1712,78 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
   }
 });
 
+// Participant Status API (GET /api/participants/:id/status)
+app.get('/api/participants/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      'SELECT id, split_id, name, status, amount_paid, allocation_amount, payment_ref FROM split_participants WHERE id = $1',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Participant not found.' });
+    }
+
+    const p = rows[0];
+
+    // If still pending, check recent payment attempts / intents to trigger active provider reconciliation
+    if (p.status !== 'PAID') {
+      try {
+        const attRes = await pool.query(
+          `SELECT provider_tx_ref, idempotency_key, provider FROM payment_attempts 
+           WHERE split_participant_id = $1 ORDER BY requested_at DESC LIMIT 1`,
+          [id]
+        );
+
+        if (attRes.rows.length > 0) {
+          const attempt = attRes.rows[0];
+          const orderId = attempt.provider_tx_ref || attempt.idempotency_key;
+          
+          if (attempt.provider === 'FIMIPAY' && orderId) {
+            const fpStatus = await FimiPayProvider.getOrderStatus(orderId);
+            if (fpStatus.isPaid) {
+              const client = await pool.connect();
+              try {
+                await client.query('BEGIN');
+                await applySuccessfulPayment(client, {
+                  orderId,
+                  participantId: id,
+                  amountPaid: fpStatus.data?.amount || p.allocation_amount,
+                  providerTxRef: orderId
+                });
+                await client.query('COMMIT');
+                p.status = 'PAID';
+                p.amount_paid = p.allocation_amount;
+              } catch (recErr) {
+                await client.query('ROLLBACK').catch(() => {});
+                console.error('[Participant Status Recon Error]:', recErr);
+              } finally {
+                client.release();
+              }
+            }
+          }
+        }
+      } catch (attErr) {
+        console.warn('[Participant Status Check Attempt Notice]:', attErr.message);
+      }
+    }
+
+    res.json({
+      id: p.id,
+      split_id: p.split_id,
+      name: p.name,
+      status: p.status,
+      is_paid: p.status === 'PAID',
+      amount_paid: p.amount_paid,
+      allocation_amount: p.allocation_amount,
+      payment_ref: p.payment_ref
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`⚡ LUMO Split PostgreSQL Backend API running on http://localhost:${port}`);
 });

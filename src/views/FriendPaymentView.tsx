@@ -15,7 +15,7 @@ import {
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
 
-type Stage = 'choose' | 'loading' | 'not_found' | 'select' | 'processing' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
+type Stage = 'choose' | 'loading' | 'not_found' | 'select' | 'processing' | 'confirming' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
 
 type FriendPaymentViewProps = {
   token: string;
@@ -36,6 +36,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [error, setError] = useState('');
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [claimSent, setClaimSent] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -92,7 +93,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       setCountdown((prev) => {
         if (prev <= 1) {
           if (countdownRef.current) clearInterval(countdownRef.current);
-          setStage('timeout');
+          setStage('confirming');
           return 0;
         }
         return prev - 1;
@@ -102,6 +103,62 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
 
   function stopCountdown() {
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+  }
+
+  async function checkPaymentStatusNow(orderId?: string) {
+    if (!participant) return false;
+    setIsCheckingStatus(true);
+
+    const checkOrderId = orderId || txRef;
+
+    try {
+      // 1. Check API endpoint
+      const res = await fetch(`/api/participants/${participant.id}/status`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'PAID' || data.is_paid) {
+          stopCountdown();
+          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
+          setStage('success');
+          setIsCheckingStatus(false);
+          return true;
+        }
+      }
+
+      // 2. Check FimiPay status directly
+      if (checkOrderId && provider === 'fimipay') {
+        const fpClient = new FimiPayPaymentProviderClient();
+        const fpRes = await fpClient.checkOrderStatus(checkOrderId);
+        if (fpRes.status === 'SUCCESS') {
+          stopCountdown();
+          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
+          setStage('success');
+          setIsCheckingStatus(false);
+          return true;
+        }
+      }
+
+      // 3. Fallback: query Supabase directly
+      const { data: dbPart } = await supabase
+        .from('split_participants')
+        .select('status, amount_paid, allocation_amount')
+        .eq('id', participant.id)
+        .maybeSingle();
+
+      if (dbPart && dbPart.status === 'PAID') {
+        stopCountdown();
+        setParticipant({ ...participant, amount_paid: dbPart.allocation_amount, status: 'PAID' });
+        setStage('success');
+        setIsCheckingStatus(false);
+        return true;
+      }
+    } catch {
+      // ignore check error
+    } finally {
+      setIsCheckingStatus(false);
+    }
+
+    return false;
   }
 
   async function handlePay() {
@@ -155,32 +212,15 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       return;
     }
 
-    if (result.status === 'TIMEOUT') {
-      stopCountdown();
-      setStage('timeout');
-      return;
-    }
-
-    // Wait for the provider's signed webhook to mark the participant PAID on the server
     setTxRef(result.txRef);
-    const deadline = Date.now() + 2 * 60 * 1000;
+
+    // Continuous polling loop (up to 5 minutes)
+    const deadline = Date.now() + 5 * 60 * 1000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      try {
-        const res = await fetch(`/api/participants/${participant.id}/status`);
-        const data = await res.json();
-        if (data.status === 'PAID') {
-          stopCountdown();
-          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
-          setStage('success');
-          return;
-        }
-      } catch {
-        // keep waiting
-      }
+      const paidSuccess = await checkPaymentStatusNow(result.txRef);
+      if (paidSuccess) return;
     }
-    stopCountdown();
-    setStage('timeout');
   }
 
   function handleCancel() {
@@ -272,6 +312,37 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
         <StepRow label="Recording payment" />
       </div>
       <button onClick={handleCancel} className="mt-8 rounded-xl border border-slate-200 px-6 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel payment</button>
+    </div></Shell>;
+  }
+
+  if (stage === 'confirming') {
+    return <Shell><div className="mx-auto max-w-md px-4 py-12 text-center animate-fade-in">
+      <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-50 border border-amber-100">
+        <Clock className="h-10 w-10 text-amber-600 animate-pulse" />
+      </div>
+      <h1 className="text-xl font-bold text-slate-900">Confirming payment with operator</h1>
+      <p className="mt-2 text-sm text-slate-500">We sent the payment prompt to your phone. If you entered your PIN, please do not pay again — we are verifying with your provider.</p>
+
+      {txRef && <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 font-mono">Ref: {txRef}</div>}
+
+      <div className="mt-6 space-y-3">
+        <button
+          onClick={() => void checkPaymentStatusNow()}
+          disabled={isCheckingStatus}
+          className="w-full rounded-xl bg-primary-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-primary-500/20 disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          {isCheckingStatus && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isCheckingStatus ? 'Checking operator status...' : 'Check Payment Status Now'}
+        </button>
+
+        <button onClick={handleClaim} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">
+          I already paid — tell the organizer
+        </button>
+
+        <button onClick={handleRetry} className="text-xs text-slate-400 hover:text-slate-600 underline">
+          Try paying again
+        </button>
+      </div>
     </div></Shell>;
   }
 
