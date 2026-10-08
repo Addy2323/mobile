@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Link as LinkIcon, Copy, Share2, MessageCircle, Check, Sparkles, Clock, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Link as LinkIcon, Copy, MessageCircle, Sparkles, Clock, Check, RefreshCw } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
+import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
 
 interface PayLinkScreenProps {
   onBack: () => void;
   language: Language;
+}
+
+export interface PaymentLinkItem {
+  id: string;
+  public_token: string;
+  title: string;
+  amount: number;
+  currency: string;
+  expiration_mode: string;
+  expires_at: string | null;
+  status: string;
+  destination_snapshot: any;
+  created_at: string;
 }
 
 export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }) => {
@@ -13,23 +27,73 @@ export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }
 
   const [title, setTitle] = useState('Weekend Trip Contribution');
   const [amount, setAmount] = useState('50000');
-  const [expiryDays, setExpiryDays] = useState('7');
+  const [expirationMode, setExpirationMode] = useState('7_DAYS');
+  const [useCustomDestination, setUseCustomDestination] = useState(false);
+  const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const t = (key: any) => getTranslation(key, language);
+  const [myLinks, setMyLinks] = useState<PaymentLinkItem[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
 
+  const t = (key: any) => getTranslation(key, language);
   const presets = ['10000', '25000', '50000', '100000'];
 
-  const activeLinks = [
-    { title: 'Concert Ticket Share', amount: 35000, token: 'S-77A1', expires: 'In 3 days', status: 'Active' },
-    { title: 'Weekend Lunch Split', amount: 20000, token: 'S-99B2', expires: 'In 6 days', status: 'Active' },
-  ];
+  async function fetchMyLinks() {
+    setLoadingLinks(true);
+    try {
+      const res = await fetch('/api/payment-links');
+      if (res.ok) {
+        const data = await res.json();
+        setMyLinks(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch payment links:', err);
+    } finally {
+      setLoadingLinks(false);
+    }
+  }
 
-  const handleGenerate = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (activeTab === 'links') {
+      fetchMyLinks();
+    }
+  }, [activeTab]);
+
+  const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = 'PAY-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    setGeneratedLink(`${window.location.origin}/s/${token}`);
+    setIsSubmitting(true);
+
+    try {
+      const payload = {
+        title,
+        amount: parseFloat(amount),
+        expiration_mode: expirationMode,
+        destination: useCustomDestination ? destination : null,
+      };
+
+      const res = await fetch('/api/payment-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Error: ${err.error || 'Failed to create payment link'}`);
+        return;
+      }
+
+      const created = await res.json();
+      const publicUrl = `${window.location.origin}/s/${created.public_token}`;
+      setGeneratedLink(publicUrl);
+    } catch (err: any) {
+      alert(`Network error: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopy = () => {
@@ -72,80 +136,93 @@ export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }
 
       {activeTab === 'create' ? (
         !generatedLink ? (
-          <form onSubmit={handleGenerate} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-            <div className="flex items-center space-x-3 pb-2 border-b border-slate-100">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                <LinkIcon className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-sm">Create Instant Pay Link</h3>
-                <p className="text-xs text-slate-500">Generate a direct payment link anyone can pay.</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Link Title / Purpose</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Concert Ticket share"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Requested Amount (TZS)</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="50000"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg text-slate-900 focus:outline-none focus:border-indigo-600"
-                  required
-                />
-
-                {/* Quick Presets */}
-                <div className="flex gap-2 mt-2">
-                  {presets.map((p) => (
-                    <button
-                      type="button"
-                      key={p}
-                      onClick={() => setAmount(p)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
-                        amount === p ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {formatMoney(parseFloat(p))}
-                    </button>
-                  ))}
+          <form onSubmit={handleGenerate} className="space-y-4">
+            <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center space-x-3 pb-2 border-b border-slate-100">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                  <LinkIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">Create Instant Pay Link</h3>
+                  <p className="text-xs text-slate-500">Generate a direct payment link anyone can pay.</p>
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Link Expiry</label>
-                <select
-                  value={expiryDays}
-                  onChange={(e) => setExpiryDays(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
-                >
-                  <option value="1">Expires in 24 Hours</option>
-                  <option value="7">Expires in 7 Days</option>
-                  <option value="30">Expires in 30 Days</option>
-                  <option value="0">Never Expires</option>
-                </select>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 mb-1 block">Link Title / Purpose</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Concert Ticket share"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 mb-1 block">Requested Amount (TZS)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="50000"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg text-slate-900 focus:outline-none focus:border-indigo-600"
+                    required
+                  />
+
+                  {/* Quick Presets */}
+                  <div className="flex gap-2 mt-2">
+                    {presets.map((p) => (
+                      <button
+                        type="button"
+                        key={p}
+                        onClick={() => setAmount(p)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                          amount === p ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {formatMoney(parseFloat(p))}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 mb-1 block">Link Expiration Rule</label>
+                  <select
+                    value={expirationMode}
+                    onChange={(e) => setExpirationMode(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                  >
+                    <option value="AFTER_PAYMENT">Single Use (Invalidate After 1 Payment)</option>
+                    <option value="24_HOURS">Expires in 24 Hours</option>
+                    <option value="7_DAYS">Expires in 7 Days</option>
+                    <option value="30_DAYS">Expires in 30 Days</option>
+                    <option value="NEVER">Never Expires</option>
+                  </select>
+                </div>
               </div>
             </div>
 
+            {/* Payment Destination Selector */}
+            <PaymentDestinationSelector
+              enabled={useCustomDestination}
+              onToggleEnabled={setUseCustomDestination}
+              destination={destination}
+              onChange={setDestination}
+              title="Payout Destination for this Link"
+            />
+
             <button
               type="submit"
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all text-sm flex items-center justify-center space-x-2"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all text-sm flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Generate Pay Link</span>
+              <span>{isSubmitting ? 'Generating...' : 'Generate Pay Link'}</span>
             </button>
           </form>
         ) : (
@@ -196,34 +273,70 @@ export const PayLinkScreen: React.FC<PayLinkScreenProps> = ({ onBack, language }
       ) : (
         /* MY ACTIVE LINKS TAB */
         <div className="space-y-3">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
-            Active Pay Links ({activeLinks.length})
-          </h3>
-
-          <div className="space-y-2">
-            {activeLinks.map((l, idx) => (
-              <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-900 text-xs">{l.title}</h4>
-                  <p className="text-[10px] text-slate-500">{l.expires}</p>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-xs font-black text-slate-900 block">{formatMoney(l.amount)}</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/s/${l.token}`);
-                      alert(`Link copied: ${window.location.origin}/s/${l.token}`);
-                    }}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline inline-flex items-center space-x-1"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>Copy</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              My Pay Links ({myLinks.length})
+            </h3>
+            <button
+              onClick={fetchMyLinks}
+              disabled={loadingLinks}
+              className="text-xs font-bold text-indigo-600 inline-flex items-center space-x-1"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingLinks ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
+
+          {loadingLinks ? (
+            <div className="text-center py-8 text-xs text-slate-400">Loading links...</div>
+          ) : myLinks.length === 0 ? (
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center space-y-2">
+              <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-xs font-bold text-slate-600">No payment links created yet</p>
+              <button
+                onClick={() => setActiveTab('create')}
+                className="text-xs font-extrabold text-indigo-600 hover:underline"
+              >
+                + Create your first link
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {myLinks.map((l) => {
+                const url = `${window.location.origin}/s/${l.public_token}`;
+                return (
+                  <div key={l.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-bold text-slate-900 text-xs">{l.title}</h4>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          l.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' :
+                          l.status === 'EXPIRED' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
+                        }`}>
+                          {l.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Token: {l.public_token}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-900 block">{formatMoney(l.amount)}</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(url);
+                          alert(`Link copied: ${url}`);
+                        }}
+                        className="text-[10px] font-bold text-indigo-600 hover:underline inline-flex items-center space-x-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

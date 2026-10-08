@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Zap, Droplet, Landmark, GraduationCap, Tv, Search, Users, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Zap, Droplet, Landmark, GraduationCap, Tv, Users, ArrowRight, Home } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
+import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
 
 interface PayBillScreenProps {
   onBack: () => void;
@@ -15,11 +16,15 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
   const [amount, setAmount] = useState('40000');
   const [validated, setValidated] = useState(false);
 
+  const [useCustomDestination, setUseCustomDestination] = useState(false);
+  const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
+
   const t = (key: any) => getTranslation(key, language);
 
   const billers = [
     { name: 'TANESCO LUKU', category: 'Electricity', icon: <Zap className="w-5 h-5 text-amber-500" />, bg: 'bg-amber-50' },
     { name: 'DAWASA Water', category: 'Water', icon: <Droplet className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-50' },
+    { name: 'House Utilities Share', category: 'Rent / House Bill', icon: <Home className="w-5 h-5 text-indigo-500" />, bg: 'bg-indigo-50' },
     { name: 'Govt Control No (GePG)', category: 'Tax / Permit', icon: <Landmark className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-50' },
     { name: 'University / School', category: 'Education', icon: <GraduationCap className="w-5 h-5 text-purple-500" />, bg: 'bg-purple-50' },
     { name: 'Azam / DSTV', category: 'TV Subscription', icon: <Tv className="w-5 h-5 text-rose-500" />, bg: 'bg-rose-50' },
@@ -29,6 +34,31 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
     e.preventDefault();
     if (!controlNumber) return;
     setValidated(true);
+  };
+
+  const handleCreateHouseContribution = async () => {
+    try {
+      const res = await fetch('/api/house-contributions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purpose: `${biller} Bill`,
+          bill_provider: biller,
+          biller_control_number: controlNumber,
+          amount_per_member: (parseFloat(amount) || 40000) / 2,
+          target_members: 2,
+          destination: useCustomDestination ? destination : null,
+        }),
+      });
+
+      if (res.ok) {
+        onSplitBill(biller, parseFloat(amount) || 40000);
+      } else {
+        onSplitBill(biller, parseFloat(amount) || 40000);
+      }
+    } catch {
+      onSplitBill(biller, parseFloat(amount) || 40000);
+    }
   };
 
   return (
@@ -66,61 +96,71 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
         </div>
       </div>
 
-      {/* Control Number Input */}
-      <form onSubmit={handleValidate} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-        <div>
-          <label className="text-xs font-bold text-slate-600 mb-1 block">Control Number / Meter / Account</label>
-          <div className="relative">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={controlNumber}
-              onChange={(e) => {
-                setControlNumber(e.target.value);
-                setValidated(false);
-              }}
-              placeholder="e.g. 991234567890"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 text-sm focus:outline-none focus:border-indigo-600"
-            />
-            <button
-              type="submit"
-              className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg text-xs hover:bg-indigo-700"
-            >
-              Lookup
-            </button>
+      {/* Control Number Input Form */}
+      <form onSubmit={handleValidate} className="space-y-4">
+        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-600 mb-1 block">Control Number / Meter / Account</label>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={controlNumber}
+                onChange={(e) => {
+                  setControlNumber(e.target.value);
+                  setValidated(false);
+                }}
+                placeholder="e.g. 991234567890"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 text-sm focus:outline-none focus:border-indigo-600"
+              />
+              <button
+                type="submit"
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg text-xs hover:bg-indigo-700"
+              >
+                Lookup
+              </button>
+            </div>
           </div>
+
+          {validated && (
+            <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-1">
+                <span className="text-[10px] font-bold text-indigo-700 uppercase">Validated Bill Info</span>
+                <h4 className="font-extrabold text-slate-900 text-sm">Customer Account Identified</h4>
+                <p className="text-xs text-slate-600">Biller: {biller}</p>
+                <p className="text-sm font-black text-indigo-600 pt-1">Due Amount: {formatMoney(parseFloat(amount) || 40000)}</p>
+              </div>
+
+              <PaymentDestinationSelector
+                enabled={useCustomDestination}
+                onToggleEnabled={setUseCustomDestination}
+                destination={destination}
+                onChange={setDestination}
+                title="Biller / Settlement Destination"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleCreateHouseContribution}
+                  className="py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Split This Bill</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => alert('Proceeding to solo bill payment')}
+                  className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5"
+                >
+                  <span>Pay Solo</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-
-        {validated && (
-          <div className="space-y-4 pt-3 border-t border-slate-100">
-            <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-1">
-              <span className="text-[10px] font-bold text-indigo-700 uppercase">Validated Bill Info</span>
-              <h4 className="font-extrabold text-slate-900 text-sm">Customer: GIVEN MHEMA</h4>
-              <p className="text-xs text-slate-600">Biller: {biller}</p>
-              <p className="text-sm font-black text-indigo-600 pt-1">Due Amount: {formatMoney(parseFloat(amount) || 40000)}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onSplitBill(biller, parseFloat(amount) || 40000)}
-                className="py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5"
-              >
-                <Users className="w-4 h-4" />
-                <span>Split This Bill</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => alert('Proceeding to solo bill payment')}
-                className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5"
-              >
-                <span>Pay Solo</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </form>
     </div>
   );

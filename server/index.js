@@ -4,6 +4,7 @@ import pg from 'pg';
 import dotenv from 'dotenv';
 import { SnippePaymentProvider } from './snippeProvider.js';
 import { FimiPayProvider } from './fimipayProvider.js';
+import { PaymentRoutingService } from './paymentRoutingService.js';
 
 dotenv.config();
 
@@ -37,6 +38,463 @@ app.get('/api/health', async (req, res) => {
   try {
     const dbRes = await pool.query('SELECT NOW()');
     res.json({ status: 'ok', time: dbRes.rows[0].now });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- PAYMENT DESTINATIONS ---
+app.get('/api/destinations', async (req, res) => {
+  try {
+    const { owner_user_id } = req.query;
+    let query = "SELECT * FROM payment_destinations WHERE status = 'ACTIVE'";
+    const values = [];
+    if (owner_user_id) {
+      query += ' AND owner_user_id = $1';
+      values.push(owner_user_id);
+    }
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/destinations', async (req, res) => {
+  try {
+    const validatedData = PaymentRoutingService.validateDestination(req.body);
+    const {
+      owner_user_id = null,
+      type,
+      provider = 'MOBILE_MONEY',
+      display_name,
+      phone_number = null,
+      lipa_number = null,
+      bank_name = null,
+      account_number = null,
+      beneficiary_full_name = null,
+      qr_reference = null,
+      card_reference = null,
+      is_verified = true,
+      metadata = null
+    } = validatedData;
+
+    const label = display_name || beneficiary_full_name || `${bank_name || type} Destination`;
+
+    const query = `
+      INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *
+    `;
+    const { rows } = await pool.query(query, [
+      owner_user_id,
+      type,
+      provider,
+      label,
+      phone_number,
+      lipa_number,
+      bank_name,
+      account_number,
+      beneficiary_full_name,
+      qr_reference,
+      card_reference,
+      is_verified,
+      metadata
+    ]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/destinations/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Destination not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- PAYMENT LINKS ---
+app.post('/api/payment-links', async (req, res) => {
+  try {
+    const {
+      title,
+      amount,
+      currency = 'TZS',
+      expiration_mode = '7_DAYS',
+      owner_user_id = null,
+      destination_id = null,
+      destination = null
+    } = req.body;
+
+    if (!title || !amount) {
+      return res.status(400).json({ error: 'Title and amount are required.' });
+    }
+
+    let destRecord = null;
+    if (destination_id) {
+      const dRes = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
+      if (dRes.rows.length > 0) destRecord = dRes.rows[0];
+    } else if (destination && destination.type) {
+      const validated = PaymentRoutingService.validateDestination(destination);
+      const label = destination.display_name || destination.beneficiary_full_name || `${destination.bank_name || destination.type} Destination`;
+      const dRes = await pool.query(
+        `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+         RETURNING *`,
+        [
+          owner_user_id,
+          validated.type,
+          validated.provider || 'MOBILE_MONEY',
+          label,
+          validated.phone_number || null,
+          validated.lipa_number || null,
+          validated.bank_name || null,
+          validated.account_number || null,
+          validated.beneficiary_full_name || null,
+          validated.qr_reference || null,
+          validated.card_reference || null
+        ]
+      );
+      destRecord = dRes.rows[0];
+    }
+
+    const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
+    const publicToken = 'PL-' + generateRefCode() + Math.random().toString(36).substring(2, 5).toUpperCase();
+
+    let expiresAt = null;
+    const now = new Date();
+    if (expiration_mode === '24_HOURS') {
+      expiresAt = new Date(now.getTime() + 24 * 3600 * 1000);
+    } else if (expiration_mode === '7_DAYS') {
+      expiresAt = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
+    } else if (expiration_mode === '30_DAYS') {
+      expiresAt = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+    }
+
+    const query = `
+      INSERT INTO payment_links (public_token, owner_user_id, title, amount, currency, expiration_mode, expires_at, status, destination_id, destination_snapshot)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8, $9)
+      RETURNING *
+    `;
+    const { rows } = await pool.query(query, [
+      publicToken,
+      owner_user_id,
+      title,
+      parseInt(amount, 10),
+      currency,
+      expiration_mode,
+      expiresAt,
+      destRecord ? destRecord.id : null,
+      destSnapshot
+    ]);
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/payment-links', async (req, res) => {
+  try {
+    const { owner_user_id } = req.query;
+    let query = 'SELECT * FROM payment_links';
+    const values = [];
+    if (owner_user_id) {
+      query += ' WHERE owner_user_id = $1';
+      values.push(owner_user_id);
+    }
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUBLIC PAYMENT LINK LOOKUP (FIXES "Split not found" END-TO-END)
+app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (req, res) => {
+  try {
+    const token = req.params.token;
+
+    // 1. Check payment_links table
+    const plRes = await pool.query('SELECT * FROM payment_links WHERE UPPER(public_token) = UPPER($1)', [token]);
+    if (plRes.rows.length > 0) {
+      const link = plRes.rows[0];
+
+      if (link.status === 'REVOKED') {
+        return res.status(400).json({ error: 'Payment link has been revoked.' });
+      }
+
+      if (link.expiration_mode === 'AFTER_PAYMENT' && link.status === 'PAID') {
+        return res.status(400).json({ error: 'Payment link already used.' });
+      }
+
+      if (link.expires_at && new Date(link.expires_at) < new Date()) {
+        await pool.query("UPDATE payment_links SET status = 'EXPIRED' WHERE id = $1", [link.id]);
+        return res.status(400).json({ error: 'Payment link has expired.' });
+      }
+
+      return res.json({
+        type: 'PAYMENT_LINK',
+        id: link.id,
+        token: link.public_token,
+        title: link.title,
+        amount: parseInt(link.amount, 10),
+        currency: link.currency,
+        status: link.status,
+        expirationMode: link.expiration_mode,
+        expiresAt: link.expires_at,
+        destinationSnapshot: link.destination_snapshot
+      });
+    }
+
+    // 2. Fallback check splits table by ref_code
+    const splitRes = await pool.query(
+      `SELECT s.*, row_to_json(m.*) AS merchant
+       FROM splits s
+       LEFT JOIN merchants m ON s.merchant_id = m.id
+       WHERE UPPER(s.ref_code) = UPPER($1)`,
+      [token]
+    );
+
+    if (splitRes.rows.length > 0) {
+      const split = splitRes.rows[0];
+      const pRes = await pool.query('SELECT * FROM split_participants WHERE split_id = $1 ORDER BY created_at ASC', [split.id]);
+
+      return res.json({
+        type: 'SPLIT',
+        id: split.id,
+        token: split.ref_code,
+        title: split.title,
+        amount: parseInt(split.total_amount, 10),
+        currency: split.currency,
+        status: split.status,
+        organizerName: split.organizer_name,
+        participantCount: split.participant_count,
+        participants: pRes.rows,
+        destinationSnapshot: split.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    return res.status(404).json({ error: 'Payment link not found.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUBLIC PAYMENT LINK PAY
+app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'], async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const token = req.params.token;
+    const { phone, payment_method = 'M-Pesa' } = req.body;
+
+    if (!phone) {
+      client.release();
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+
+    // Lookup link in payment_links
+    const plRes = await client.query('SELECT * FROM payment_links WHERE UPPER(public_token) = UPPER($1) FOR UPDATE', [token]);
+
+    if (plRes.rows.length > 0) {
+      const link = plRes.rows[0];
+
+      if (link.status === 'REVOKED') {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ error: 'Payment link has been revoked.' });
+      }
+
+      if (link.expiration_mode === 'AFTER_PAYMENT' && link.status === 'PAID') {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ error: 'Payment link already used.' });
+      }
+
+      if (link.expires_at && new Date(link.expires_at) < new Date()) {
+        await client.query("UPDATE payment_links SET status = 'EXPIRED' WHERE id = $1", [link.id]);
+        await client.query('COMMIT');
+        client.release();
+        return res.status(400).json({ error: 'Payment link has expired.' });
+      }
+
+      const txRef = `PL-${Date.now().toString().slice(-6)}`;
+
+      // Update link status
+      const newStatus = link.expiration_mode === 'AFTER_PAYMENT' ? 'PAID' : link.status;
+      await client.query(
+        'UPDATE payment_links SET status = $1, paid_at = NOW(), payment_ref = $2 WHERE id = $3',
+        [newStatus, txRef, link.id]
+      );
+
+      // Record Audit Log
+      await client.query(
+        `INSERT INTO audit_logs (actor, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'PAYMENT_LINK_PAID', 'payment_link', $2, $3)`,
+        [phone, link.id, { amount: link.amount, phone, txRef, destinationSnapshot: link.destination_snapshot }]
+      );
+
+      await client.query('COMMIT');
+      client.release();
+
+      return res.json({
+        success: true,
+        message: 'Payment received successfully.',
+        txRef,
+        amountPaid: parseInt(link.amount, 10),
+        destinationSnapshot: link.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    await client.query('ROLLBACK');
+    client.release();
+    return res.status(404).json({ error: 'Payment link not found.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- BIRTHDAY POOLS ---
+app.post('/api/birthday-pools', async (req, res) => {
+  try {
+    const { birthday_person, message, target_amount, currency = 'TZS', owner_user_id = null, destination_id = null, destination = null } = req.body;
+    let destRecord = null;
+    if (destination_id) {
+      const dRes = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
+      if (dRes.rows.length > 0) destRecord = dRes.rows[0];
+    } else if (destination && destination.type) {
+      const validated = PaymentRoutingService.validateDestination(destination);
+      const label = destination.display_name || destination.beneficiary_full_name || `${destination.bank_name || destination.type} Destination`;
+      const dRes = await pool.query(
+        `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING *`,
+        [owner_user_id, validated.type, validated.provider || 'MOBILE_MONEY', label, validated.phone_number || null, validated.lipa_number || null, validated.bank_name || null, validated.account_number || null, validated.beneficiary_full_name || null, validated.qr_reference || null, validated.card_reference || null]
+      );
+      destRecord = dRes.rows[0];
+    }
+
+    const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
+    const { rows } = await pool.query(
+      `INSERT INTO birthday_pools (owner_user_id, birthday_person, message, target_amount, currency, status, destination_id, destination_snapshot)
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7) RETURNING *`,
+      [owner_user_id, birthday_person, message, target_amount, currency, destRecord ? destRecord.id : null, destSnapshot]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/birthday-pools', async (req, res) => {
+  try {
+    const { owner_user_id } = req.query;
+    let query = 'SELECT * FROM birthday_pools';
+    const values = [];
+    if (owner_user_id) { query += ' WHERE owner_user_id = $1'; values.push(owner_user_id); }
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- MICHANGO / COMMUNITY EVENTS ---
+app.post('/api/michango-events', async (req, res) => {
+  try {
+    const { title, event_type = 'WEDDING', description, target_amount, currency = 'TZS', owner_user_id = null, destination_id = null, destination = null } = req.body;
+    let destRecord = null;
+    if (destination_id) {
+      const dRes = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
+      if (dRes.rows.length > 0) destRecord = dRes.rows[0];
+    } else if (destination && destination.type) {
+      const validated = PaymentRoutingService.validateDestination(destination);
+      const label = destination.display_name || destination.beneficiary_full_name || `${destination.bank_name || destination.type} Destination`;
+      const dRes = await pool.query(
+        `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING *`,
+        [owner_user_id, validated.type, validated.provider || 'MOBILE_MONEY', label, validated.phone_number || null, validated.lipa_number || null, validated.bank_name || null, validated.account_number || null, validated.beneficiary_full_name || null, validated.qr_reference || null, validated.card_reference || null]
+      );
+      destRecord = dRes.rows[0];
+    }
+
+    const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
+    const { rows } = await pool.query(
+      `INSERT INTO michango_events (owner_user_id, title, event_type, description, target_amount, currency, status, destination_id, destination_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7, $8) RETURNING *`,
+      [owner_user_id, title, event_type, description, target_amount, currency, destRecord ? destRecord.id : null, destSnapshot]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/michango-events', async (req, res) => {
+  try {
+    const { owner_user_id } = req.query;
+    let query = 'SELECT * FROM michango_events';
+    const values = [];
+    if (owner_user_id) { query += ' WHERE owner_user_id = $1'; values.push(owner_user_id); }
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- PAY BILLS / HOUSE CONTRIBUTIONS ---
+app.post('/api/house-contributions', async (req, res) => {
+  try {
+    const { purpose, bill_provider = 'TANESCO', biller_control_number = null, amount_per_member, target_members = 1, currency = 'TZS', owner_user_id = null, destination_id = null, destination = null } = req.body;
+    const total_target_amount = amount_per_member * target_members;
+
+    let destRecord = null;
+    if (destination_id) {
+      const dRes = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
+      if (dRes.rows.length > 0) destRecord = dRes.rows[0];
+    } else if (destination && destination.type) {
+      const validated = PaymentRoutingService.validateDestination(destination);
+      const label = destination.display_name || destination.beneficiary_full_name || `${destination.bank_name || destination.type} Destination`;
+      const dRes = await pool.query(
+        `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING *`,
+        [owner_user_id, validated.type, validated.provider || 'MOBILE_MONEY', label, validated.phone_number || null, validated.lipa_number || null, validated.bank_name || null, validated.account_number || null, validated.beneficiary_full_name || null, validated.qr_reference || null, validated.card_reference || null]
+      );
+      destRecord = dRes.rows[0];
+    }
+
+    const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
+    const { rows } = await pool.query(
+      `INSERT INTO house_contributions (owner_user_id, purpose, bill_provider, biller_control_number, amount_per_member, target_members, total_target_amount, currency, contribution_status, bill_payment_status, destination_id, destination_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'OPEN', 'UNPAID', $9, $10) RETURNING *`,
+      [owner_user_id, purpose, bill_provider, biller_control_number, amount_per_member, target_members, total_target_amount, currency, destRecord ? destRecord.id : null, destSnapshot]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/house-contributions', async (req, res) => {
+  try {
+    const { owner_user_id } = req.query;
+    let query = 'SELECT * FROM house_contributions';
+    const values = [];
+    if (owner_user_id) { query += ' WHERE owner_user_id = $1'; values.push(owner_user_id); }
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -208,15 +666,47 @@ app.post('/api/splits', async (req, res) => {
       due_at = null,
       note = null,
       ref_code,
+      owner_user_id = null,
+      destination_id = null,
+      destination = null,
       participants = [],
       items = []
     } = req.body;
 
+    let destRecord = null;
+    if (destination_id) {
+      const dRes = await client.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
+      if (dRes.rows.length > 0) destRecord = dRes.rows[0];
+    } else if (destination && destination.type) {
+      const validated = PaymentRoutingService.validateDestination(destination);
+      const label = destination.display_name || destination.beneficiary_full_name || `${destination.bank_name || destination.type} Destination`;
+      const dRes = await client.query(
+        `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+         RETURNING *`,
+        [
+          owner_user_id,
+          validated.type,
+          validated.provider || 'MOBILE_MONEY',
+          label,
+          validated.phone_number || null,
+          validated.lipa_number || null,
+          validated.bank_name || null,
+          validated.account_number || null,
+          validated.beneficiary_full_name || null,
+          validated.qr_reference || null,
+          validated.card_reference || null
+        ]
+      );
+      destRecord = dRes.rows[0];
+    }
+
+    const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
     const generatedRef = ref_code || generateRefCode();
 
     const insertSplitQuery = `
-      INSERT INTO splits (title, category, currency, total_amount, mode, organizer_name, organizer_phone, merchant_id, status, due_at, note, settlement_percent, amount_paid, participant_count, ref_code)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      INSERT INTO splits (title, category, currency, total_amount, mode, organizer_name, organizer_phone, merchant_id, status, due_at, note, settlement_percent, amount_paid, participant_count, ref_code, owner_user_id, destination_id, destination_snapshot)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
     const splitRes = await client.query(insertSplitQuery, [
@@ -234,7 +724,10 @@ app.post('/api/splits', async (req, res) => {
       0,
       0,
       participants.length,
-      generatedRef
+      generatedRef,
+      owner_user_id,
+      destRecord ? destRecord.id : null,
+      destSnapshot
     ]);
 
     const createdSplit = splitRes.rows[0];

@@ -6,12 +6,9 @@ import {
   Users,
   DollarSign,
   Receipt,
-  Share2,
-  Copy,
-  QrCode,
   MessageCircle,
+  Copy,
   Plus,
-  Trash2,
   Utensils,
   Hotel,
   Car,
@@ -20,12 +17,12 @@ import {
   PartyPopper,
   ShoppingBag,
   MoreHorizontal,
-  Search,
 } from 'lucide-react';
 import { supabase, type Split } from '@/lib/supabase';
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { BottomSheet } from '../components/BottomSheet';
+import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
 
 interface CreateSplitScreenProps {
   onComplete: (split: Split) => void;
@@ -47,7 +44,6 @@ const INITIAL_CONTACTS: Contact[] = [
   { id: '1', name: 'Kelvin', phone: '+255 712 345 678', selected: true },
   { id: '2', name: 'Asia', phone: '+255 756 432 111', selected: true },
   { id: '3', name: 'Joseph', phone: '+255 784 321 987', selected: true },
-  { id: '4', name: 'Ado', phone: '+255 716 555 123', selected: true },
 ];
 
 export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete, onCancel, language }) => {
@@ -57,13 +53,9 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
   const [totalAmount, setTotalAmount] = useState<string>('120000');
   const [method, setMethod] = useState<SplitMethod>('equal');
   const [contacts, setContacts] = useState<Contact[]>(INITIAL_CONTACTS);
-  const [customAmounts, setCustomAmounts] = useState<Record<string, number>>({});
-  const [items, setItems] = useState([
-    { id: '1', name: 'Burger', price: 30000, assignedTo: 'Kelvin' },
-    { id: '2', name: 'Pizza', price: 25000, assignedTo: 'Asia' },
-    { id: '3', name: 'Chicken', price: 35000, assignedTo: 'Joseph' },
-    { id: '4', name: 'Soda & Drinks', price: 30000, assignedTo: 'You' },
-  ]);
+
+  const [useCustomDestination, setUseCustomDestination] = useState(false);
+  const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
 
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [newContactName, setNewContactName] = useState('');
@@ -86,14 +78,12 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
   ];
 
   const selectedContacts = contacts.filter((c) => c.selected);
-  const totalPeople = selectedContacts.length + 1; // Organizer + selected friends
+  const totalPeople = selectedContacts.length + 1;
   const parsedAmount = parseFloat(totalAmount) || 0;
   const equalShare = parsedAmount > 0 ? Math.round(parsedAmount / totalPeople) : 0;
 
   const toggleContact = (id: string) => {
-    setContacts(
-      contacts.map((c) => (c.id === id ? { ...c, selected: !c.selected } : c))
-    );
+    setContacts(contacts.map((c) => (c.id === id ? { ...c, selected: !c.selected } : c)));
   };
 
   const handleAddCustomContact = (e: React.FormEvent) => {
@@ -129,31 +119,31 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       amount_paid: 0,
       participant_count: totalPeople,
       ref_code: refCode,
+      destination: useCustomDestination ? destination : null,
     };
 
     try {
-      const { data, error } = await supabase.from('splits').insert(newSplitPayload);
-      if (error) {
-        console.error('Split creation error:', error);
+      const apiRes = await fetch('/api/splits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSplitPayload),
+      });
+
+      let splitObj: Split;
+      if (apiRes.ok) {
+        splitObj = await apiRes.json();
+      } else {
+        const { data } = await supabase.from('splits').insert(newSplitPayload).select().single();
+        splitObj = data as Split;
       }
 
-      const splitObj: Split = data ? (Array.isArray(data) ? data[0] : data) : {
-        id: 'split_' + Date.now(),
-        ...newSplitPayload,
-        due_at: null,
-        note: null,
-        merchant_id: null,
-        created_at: new Date().toISOString(),
-      };
-
-      // Also insert participants
       const participantRows = [
         {
           split_id: splitObj.id,
           name: organizerName + ' (You)',
           phone: organizerPhone,
           allocation_amount: equalShare,
-          amount_paid: equalShare, // Organizer share recorded
+          amount_paid: equalShare,
           status: 'Paid',
           is_organizer: true,
         },
@@ -171,15 +161,13 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       await supabase.from('split_participants').insert(participantRows);
 
       setCreatedSplit(splitObj);
-      setStep(6); // Move to Share screen
+      setStep(6);
     } catch (err) {
       console.error('Failed creating split:', err);
     }
   };
 
-  const shareUrl = createdSplit
-    ? `${window.location.origin}/s/${createdSplit.ref_code}`
-    : `https://lumo.co.tz/s/BH7K2`;
+  const shareUrl = createdSplit ? `${window.location.origin}/s/${createdSplit.ref_code}` : `${window.location.origin}/s/DEMO`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -189,7 +177,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col justify-between p-4 pb-safe no-tap-highlight">
-      {/* Step Indicator Header */}
+      {/* Header */}
       {step < 6 && (
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between">
@@ -205,7 +193,6 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
             <div className="w-6" />
           </div>
 
-          {/* Wizard Progress Bar */}
           <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-indigo-600 transition-all duration-300"
@@ -263,35 +250,26 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">
-                  {t('merchantName')}
-                </label>
+                <label className="text-xs font-bold text-slate-600 mb-1 block">Title / Purpose</label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t('merchantPlaceholder')}
+                  placeholder="e.g. Dinner at The View"
                   className="w-full px-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-slate-900 text-sm"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">
-                  {t('totalAmount')}
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">
-                    TZS
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={totalAmount}
-                    onChange={(e) => setTotalAmount(e.target.value)}
-                    placeholder="120000"
-                    className="w-full pl-14 pr-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-black text-xl text-slate-900"
-                  />
-                </div>
+                <label className="text-xs font-bold text-slate-600 mb-1 block">Total Amount (TZS)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={totalAmount}
+                  onChange={(e) => setTotalAmount(e.target.value)}
+                  placeholder="120000"
+                  className="w-full px-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-black text-xl text-slate-900"
+                />
               </div>
             </div>
           </div>
@@ -306,7 +284,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         </div>
       )}
 
-      {/* STEP 3: How to Split */}
+      {/* STEP 3: Split Method */}
       {step === 3 && (
         <div className="flex-1 flex flex-col justify-between py-4 space-y-6">
           <div className="space-y-4">
@@ -316,13 +294,10 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
             </div>
 
             <div className="space-y-2.5">
-              {/* Equally */}
               <div
                 onClick={() => setMethod('equal')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'equal'
-                    ? 'border-indigo-600 bg-indigo-50/50'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
+                  method === 'equal' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -337,13 +312,10 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                 {method === 'equal' && <Check className="w-5 h-5 text-indigo-600" />}
               </div>
 
-              {/* By Amount */}
               <div
                 onClick={() => setMethod('amount')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'amount'
-                    ? 'border-indigo-600 bg-indigo-50/50'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
+                  method === 'amount' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -358,13 +330,10 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                 {method === 'amount' && <Check className="w-5 h-5 text-indigo-600" />}
               </div>
 
-              {/* By Items */}
               <div
                 onClick={() => setMethod('items')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'items'
-                    ? 'border-indigo-600 bg-indigo-50/50'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
+                  method === 'items' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -377,27 +346,6 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                   </div>
                 </div>
                 {method === 'items' && <Check className="w-5 h-5 text-indigo-600" />}
-              </div>
-
-              {/* I'll Pay First */}
-              <div
-                onClick={() => setMethod('payFirst')}
-                className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'payFirst'
-                    ? 'border-indigo-600 bg-indigo-50/50'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl">
-                    <Check className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{t('payFirst')}</h4>
-                    <p className="text-xs text-slate-500">Pay full bill now, collect from friends later</p>
-                  </div>
-                </div>
-                {method === 'payFirst' && <Check className="w-5 h-5 text-indigo-600" />}
               </div>
             </div>
           </div>
@@ -418,29 +366,24 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900">{t('addFriends')}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {selectedContacts.length} {t('peopleSelected')} (+ You)
-                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedContacts.length} selected (+ You)</p>
               </div>
               <button
                 onClick={() => setIsAddingContact(true)}
-                className="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-xs flex items-center space-x-1 hover:bg-indigo-100"
+                className="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-xs flex items-center space-x-1"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Contact</span>
               </button>
             </div>
 
-            {/* Contacts List */}
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto">
               {contacts.map((contact) => (
                 <div
                   key={contact.id}
                   onClick={() => toggleContact(contact.id)}
                   className={`p-3.5 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                    contact.selected
-                      ? 'border-indigo-600 bg-indigo-50/50'
-                      : 'border-slate-100 bg-white hover:border-slate-200'
+                    contact.selected ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
                   }`}
                 >
                   <div className="flex items-center space-x-3">
@@ -452,11 +395,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                       <p className="text-xs text-slate-500">{contact.phone}</p>
                     </div>
                   </div>
-                  <div
-                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                      contact.selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
-                    }`}
-                  >
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${contact.selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'}`}>
                     {contact.selected && <Check className="w-4 h-4" />}
                   </div>
                 </div>
@@ -474,49 +413,42 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         </div>
       )}
 
-      {/* STEP 5: Preview */}
+      {/* STEP 5: Preview & Payment Destination */}
       {step === 5 && (
         <div className="flex-1 flex flex-col justify-between py-4 space-y-4">
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <div>
               <h2 className="text-xl font-extrabold text-slate-900">{t('splitPreview')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Review before creating the split bill.</p>
+              <p className="text-xs text-slate-500 mt-0.5">Review summary and select payment destination.</p>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-              <div className="text-center space-y-1 pb-4 border-b border-slate-100">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</span>
-                <h3 className="text-3xl font-black text-slate-900">{formatMoney(parsedAmount)}</h3>
+            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+              <div className="text-center space-y-1 pb-3 border-b border-slate-100">
+                <span className="text-xs font-semibold text-slate-500 uppercase">{title}</span>
+                <h3 className="text-2xl font-black text-slate-900">{formatMoney(parsedAmount)}</h3>
                 <p className="text-xs font-bold text-indigo-600">
                   {totalPeople} people · {formatMoney(equalShare)} each
                 </p>
               </div>
 
-              {/* Participant Breakdown List */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-900">
-                  <span className="flex items-center space-x-2">
-                    <div className="w-6 h-6 bg-indigo-600 text-white font-bold rounded-full flex items-center justify-center text-[10px]">
-                      Y
-                    </div>
-                    <span>You (Organizer)</span>
-                  </span>
-                  <span>{formatMoney(equalShare)}</span>
-                </div>
-
+              <div className="space-y-2">
                 {selectedContacts.map((c) => (
                   <div key={c.id} className="flex items-center justify-between text-xs font-medium text-slate-700">
-                    <span className="flex items-center space-x-2">
-                      <div className="w-6 h-6 bg-slate-200 text-slate-600 font-bold rounded-full flex items-center justify-center text-[10px]">
-                        {c.name.slice(0, 1)}
-                      </div>
-                      <span>{c.name}</span>
-                    </span>
+                    <span>{c.name}</span>
                     <span>{formatMoney(equalShare)}</span>
                   </div>
                 ))}
               </div>
             </div>
+
+            {/* Reusable Destination Selector */}
+            <PaymentDestinationSelector
+              enabled={useCustomDestination}
+              onToggleEnabled={setUseCustomDestination}
+              destination={destination}
+              onChange={setDestination}
+              title="Payout Destination for Collected Funds"
+            />
           </div>
 
           <button
@@ -532,18 +464,17 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       {step === 6 && (
         <div className="flex-1 flex flex-col justify-between py-6 text-center space-y-6">
           <div className="my-auto space-y-6">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner animate-bounce">
+            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
               <Check className="w-10 h-10" />
             </div>
 
             <div>
               <h2 className="text-2xl font-extrabold text-slate-900">Split Bill Created!</h2>
               <p className="text-slate-500 text-xs mt-1 max-w-xs mx-auto">
-                Share this payment link with friends to collect their share.
+                Share this link with participants to collect contributions into your specified destination.
               </p>
             </div>
 
-            {/* Share Card */}
             <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
               <div className="p-3 bg-slate-50 rounded-2xl text-xs font-mono font-bold text-slate-700 truncate border border-slate-200">
                 {shareUrl}
@@ -556,7 +487,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                   )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-md flex items-center justify-center space-x-2 text-sm transition-all"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-2 text-sm"
                 >
                   <MessageCircle className="w-5 h-5" />
                   <span>{t('shareViaWhatsApp')}</span>
@@ -564,7 +495,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
                 <button
                   onClick={copyToClipboard}
-                  className="w-full py-3 bg-white border border-slate-200 hover:bg-slate-50 active:scale-[0.98] text-slate-800 font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs transition-all"
+                  className="w-full py-3 bg-white border border-slate-200 text-slate-800 font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs"
                 >
                   <Copy className="w-4 h-4 text-indigo-600" />
                   <span>{copied ? t('linkCopied') : t('copyLink')}</span>
@@ -575,7 +506,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
           <button
             onClick={() => createdSplit && onComplete(createdSplit)}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg transition-all"
           >
             Done & View Split Status
           </button>
@@ -583,11 +514,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       )}
 
       {/* Add Contact Bottom Sheet */}
-      <BottomSheet
-        isOpen={isAddingContact}
-        onClose={() => setIsAddingContact(false)}
-        title="Add Custom Contact"
-      >
+      <BottomSheet isOpen={isAddingContact} onClose={() => setIsAddingContact(false)} title="Add Custom Contact">
         <form onSubmit={handleAddCustomContact} className="space-y-4 pt-1">
           <div>
             <label className="text-xs font-bold text-slate-600 mb-1 block">Friend's Name</label>
