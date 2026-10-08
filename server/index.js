@@ -1692,7 +1692,7 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
     const amountPaid = eventPayload.amount || eventPayload.data?.amount;
     const participantId = eventPayload.participant_id || eventPayload.data?.participant_id || eventPayload.metadata?.participant_id;
 
-    if (paymentStatus === 'SUCCESS' || (!paymentStatus && eventType === 'payment.success')) {
+    if (['SUCCESS', 'COMPLETED'].includes(paymentStatus) || (!paymentStatus && eventType === 'payment.success')) {
       await applySuccessfulPayment(client, {
         orderId,
         participantId,

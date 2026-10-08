@@ -159,7 +159,7 @@ export class FimiPayProvider {
 
     if (res.success && res.data) {
       const rawStatus = (res.data.payment_status || res.data.status || 'PENDING').toUpperCase();
-      const isPaid = rawStatus === 'SUCCESS';
+      const isPaid = ['SUCCESS', 'COMPLETED'].includes(String(rawStatus || '').toUpperCase());
 
       return {
         success: true,
