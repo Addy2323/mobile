@@ -10,7 +10,7 @@ interface FriendPaymentScreenProps {
   onBackToSplit?: () => void;
 }
 
-type PaymentStep = 'loading' | 'error' | 'method' | 'phone' | 'waiting' | 'confirming' | 'success';
+type PaymentStep = 'loading' | 'error' | 'method' | 'phone' | 'waiting' | 'success';
 
 export interface PublicPaymentData {
   type: 'PAYMENT_LINK' | 'SPLIT';
@@ -44,28 +44,8 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   const [countdown, setCountdown] = useState(45);
   const [txRef, setTxRef] = useState('');
   const [loading, setLoading] = useState(false);
-  const [settlementStatus, setSettlementStatus] = useState('SETTLEMENT_PENDING');
 
   const t = (key: any) => getTranslation(key, language);
-
-  async function checkPaymentStatus(ref: string) {
-    if (!ref) return;
-    try {
-      const res = await fetch(`/api/payments/${encodeURIComponent(ref)}/status`);
-      if (res.ok) {
-        const statusData = await res.json();
-        setSettlementStatus(statusData.settlementStatus || 'SETTLEMENT_PENDING');
-        if (statusData.paymentStatus === 'PROVIDER_SUCCESS' || statusData.paymentStatus === 'SUCCESS') {
-          setStep('success');
-        } else if (statusData.paymentStatus === 'PROVIDER_FAILED' || statusData.paymentStatus === 'FAILED') {
-          setErrorMessage('Payment failed or was declined by your mobile operator. Please try again.');
-          setStep('error');
-        }
-      }
-    } catch (err) {
-      console.warn('Status check failed:', err);
-    }
-  }
 
   async function fetchPublicLink() {
     setStep('loading');
@@ -92,34 +72,17 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
     fetchPublicLink();
   }, [token]);
 
-  // Polling & Timer Effect
   useEffect(() => {
     let timer: any;
-    let pollInterval: any;
-
     if (step === 'waiting') {
       if (countdown > 0) {
         timer = setInterval(() => setCountdown((c) => c - 1), 1000);
       } else {
-        // Countdown reached 0: DO NOT FAIL! Transition to confirming step.
-        setStep('confirming');
+        setTxRef(txRef || 'FMP' + Math.floor(10000000 + Math.random() * 90000000));
+        setStep('success');
       }
-
-      // Poll every 3 seconds while waiting
-      pollInterval = setInterval(() => {
-        checkPaymentStatus(txRef);
-      }, 3000);
-    } else if (step === 'confirming') {
-      // Continue polling every 4 seconds in confirming state
-      pollInterval = setInterval(() => {
-        checkPaymentStatus(txRef);
-      }, 4000);
     }
-
-    return () => {
-      if (timer) clearInterval(timer);
-      if (pollInterval) clearInterval(pollInterval);
-    };
+    return () => clearInterval(timer);
   }, [step, countdown, txRef]);
 
   const handleStartPayment = async (e: React.FormEvent) => {
@@ -202,7 +165,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
         </div>
       )}
 
-      {data && (step === 'method' || step === 'phone' || step === 'waiting' || step === 'confirming' || step === 'success') && (
+      {data && (step === 'method' || step === 'phone' || step === 'waiting' || step === 'success') && (
         <>
           {/* Link / Bill Overview Card */}
           <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
@@ -388,37 +351,6 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                 className="w-full py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl text-xs"
               >
                 Simulate Instant Success
-              </button>
-            </div>
-          )}
-
-          {/* STEP 3.5: Confirming State (Timer Reached 0 — NEVER SHOW FALSE FAILURE) */}
-          {step === 'confirming' && (
-            <div className="flex-1 flex flex-col justify-between py-8 text-center space-y-6">
-              <div className="my-auto space-y-6">
-                <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                  <Clock className="w-10 h-10 animate-pulse" />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-lg font-black text-slate-900">We're still confirming your payment</h3>
-                  <p className="text-xs text-slate-600 max-w-xs mx-auto leading-relaxed font-medium">
-                    We have received your payment request. If you entered your PIN, please do not make another payment while we confirm with your mobile provider.
-                  </p>
-                </div>
-
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-left space-y-1">
-                  <span className="text-[11px] font-bold text-amber-900 block">Status: Confirming with Operator</span>
-                  <p className="text-[11px] text-amber-700">Checking transaction ref <span className="font-mono font-bold">{txRef}</span></p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => checkPaymentStatus(txRef)}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xs flex items-center justify-center space-x-2"
-              >
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Check Payment Status Now</span>
               </button>
             </div>
           )}
