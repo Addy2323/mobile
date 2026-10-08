@@ -609,7 +609,9 @@ app.patch('/api/merchants/:id', async (req, res) => {
 // --- SPLITS ---
 app.get('/api/splits', async (req, res) => {
   const k = process.env.ADMIN_KEY;
-  if (!k || !safeEq(req.get('x-admin-key'), k)) return res.status(403).json({ error: 'Forbidden' });
+  const isAdmin = !!k && safeEq(req.get('x-admin-key'), k);
+  const ownerQ = req.query.owner_user_id;
+  if (!isAdmin && !ownerQ) return res.status(400).json({ error: 'owner_user_id required' });
   try {
     const query = `
       SELECT s.*,
@@ -619,7 +621,7 @@ app.get('/api/splits', async (req, res) => {
       ORDER BY s.created_at DESC
     `;
     const { rows } = await pool.query(query);
-    res.json(rows.map(({ organizer_phone, ...rest }) => rest));
+    res.json(rows.filter(r => isAdmin || r.owner_user_id === ownerQ).map(({ organizer_phone, ...rest }) => rest));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

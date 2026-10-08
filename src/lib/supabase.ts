@@ -1,3 +1,4 @@
+import { getOwnerId } from './ownerId';
 export type Merchant = {
   id: string;
   display_name: string;
@@ -303,7 +304,7 @@ class PostgresQueryBuilder {
         const data = await res.json();
         return { data: this.isSingle || this.isMaybeSingle ? data : [data], error: null };
       }
-      const res = await fetch(`${API_BASE}/splits`);
+      const res = await fetch(`${API_BASE}/splits?owner_user_id=${encodeURIComponent(getOwnerId())}`);
       const data = await res.json();
       return { data, error: null };
     }

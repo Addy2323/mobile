@@ -23,6 +23,7 @@ import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { BottomSheet } from '../components/BottomSheet';
 import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
+import { getOwnerId } from '@/lib/ownerId';
 
 interface CreateSplitScreenProps {
   onComplete: (split: Split) => void;
@@ -119,6 +120,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       amount_paid: 0,
       participant_count: totalPeople,
       ref_code: refCode,
+      owner_user_id: getOwnerId(),
       destination: useCustomDestination ? destination : null,
     };
 
