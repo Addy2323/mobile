@@ -893,7 +893,7 @@ app.patch('/api/participants/:id', async (req, res) => {
     }
 
     if (setClause.length === 0) {
-      client.release();
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No fields to update' });
     }
 
@@ -901,7 +901,6 @@ app.patch('/api/participants/:id', async (req, res) => {
     const { rows } = await client.query(updateQuery, values);
     if (rows.length === 0) {
       await client.query('ROLLBACK');
-      client.release();
       return res.status(404).json({ error: 'Participant not found' });
     }
 
@@ -934,7 +933,8 @@ app.patch('/api/participants/:id', async (req, res) => {
     res.json(updatedParticipant);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('participants patch failed:', err);
+    res.status(500).json({ error: 'Update failed.' });
   } finally {
     client.release();
   }
