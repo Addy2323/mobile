@@ -1394,10 +1394,38 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   let pId = participantId;
 
   if (!pId && orderId) {
-    // Attempt lookup via payment_attempts or order_id pattern
-    const paCheck = await client.query('SELECT split_participant_id FROM payment_attempts WHERE idempotency_key = $1 OR provider_tx_ref = $1 LIMIT 1', [orderId]);
-    if (paCheck.rows.length > 0) {
-      pId = paCheck.rows[0].split_participant_id;
+    // 1. Direct match on split_participants.payment_ref or id
+    const pDirect = await client.query('SELECT id FROM split_participants WHERE payment_ref = $1 OR id = $1 LIMIT 1', [orderId]);
+    if (pDirect.rows.length > 0) {
+      pId = pDirect.rows[0].id;
+    }
+
+    // 2. Lookup via payment_attempts
+    if (!pId) {
+      const paCheck = await client.query('SELECT split_participant_id FROM payment_attempts WHERE idempotency_key = $1 OR provider_tx_ref = $1 LIMIT 1', [orderId]);
+      if (paCheck.rows.length > 0) {
+        pId = paCheck.rows[0].split_participant_id;
+      }
+    }
+
+    // 3. Lookup via payment_intents
+    if (!pId) {
+      const piCheck = await client.query('SELECT split_participant_id FROM payment_intents WHERE idempotency_key = $1 LIMIT 1', [orderId]);
+      if (piCheck.rows.length > 0) {
+        pId = piCheck.rows[0].split_participant_id;
+      }
+    }
+
+    // 4. Extract participant ID pattern if orderId is fp_<participantId>_<timestamp>
+    if (!pId && String(orderId).startsWith('fp_')) {
+      const parts = String(orderId).split('_');
+      if (parts.length >= 2 && parts[1]) {
+        const potentialId = parts[1];
+        const pCheck = await client.query('SELECT id FROM split_participants WHERE id = $1 LIMIT 1', [potentialId]);
+        if (pCheck.rows.length > 0) {
+          pId = pCheck.rows[0].id;
+        }
+      }
     }
   }
 
@@ -1517,6 +1545,7 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
     // Save intent and attempt in DB if tied to a participant
     if (participantId) {
       try {
+        await client.query('UPDATE split_participants SET payment_ref = $1 WHERE id = $2', [orderId, participantId]);
         const pCheck = await client.query('SELECT split_id FROM split_participants WHERE id = $1', [participantId]);
         if (pCheck.rows.length > 0) {
           const splitId = pCheck.rows[0].split_id;
@@ -1761,6 +1790,19 @@ app.get('/api/participants/:id/status', async (req, res) => {
               } finally {
                 client.release();
               }
+            } else if (['CANCELLED', 'USERCANCELLED', 'REJECTED', 'FAILED', 'EXPIRED'].includes(fpStatus.paymentStatus)) {
+              return res.json({
+                id: p.id,
+                split_id: p.split_id,
+                name: p.name,
+                status: 'FAILED',
+                payment_status: fpStatus.paymentStatus,
+                is_paid: false,
+                failure_reason: 'Payment cancelled or rejected by user on phone.',
+                amount_paid: p.amount_paid,
+                allocation_amount: p.allocation_amount,
+                payment_ref: p.payment_ref
+              });
             }
           }
         }

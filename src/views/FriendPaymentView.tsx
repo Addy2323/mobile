@@ -123,6 +123,18 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
           setIsCheckingStatus(false);
           return true;
         }
+        if (data.status === 'FAILED') {
+          stopCountdown();
+          setPaymentResult({
+            status: 'FAILED',
+            txRef: checkOrderId,
+            failureCode: data.payment_status || 'CANCELLED',
+            failureMessage: data.failure_reason || 'Payment was cancelled or rejected on your phone.'
+          });
+          setStage('failed');
+          setIsCheckingStatus(false);
+          return true;
+        }
       }
 
       // 2. Check FimiPay status directly
