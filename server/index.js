@@ -1651,7 +1651,7 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
     req.headers['x-signature'] ||
     req.headers['x-webhook-signature'];
 
-  const isValid = FimiPayProvider.verifyWebhookSignature(rawBuffer, sigHeader);
+  const isValid = FimiPayProvider.verifyWebhookSignature(rawBuffer, req);
   if (!isValid) {
     console.warn('⚠️ FimiPay Webhook signature verification failed.');
     return res.status(401).json({ error: 'Invalid webhook signature.' });

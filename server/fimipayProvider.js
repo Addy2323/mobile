@@ -391,31 +391,82 @@ export class FimiPayProvider {
 
   /**
    * Webhook Signature Verification (§ 7.1)
-   * X-Fimipay-Signature = HMAC-SHA256(raw_request_body, webhook_secret)
+   * V1: X-Fimipay-Signature = HMAC-SHA256(raw_request_body, webhook_secret)
+   * V2: X-Fimipay-Signature-V2 = HMAC-SHA256("timestamp.nonce.path.rawBody", webhook_secret)
    */
-  static verifyWebhookSignature(rawBodyBuffer, signatureHeader) {
-    const secret = FIMIPAY_WEBHOOK_SECRET;
-    if (!signatureHeader || !rawBodyBuffer || !secret) {
-      console.warn('[FimiPayProvider] Webhook signature, raw body buffer, or FIMIPAY_WEBHOOK_SECRET missing');
+  static verifyWebhookSignature(rawBodyBuffer, reqOrHeaders, optionalPath) {
+    if (!rawBodyBuffer) {
+      console.warn('[FimiPayProvider] Webhook raw body buffer missing');
       return false;
     }
 
-    try {
-      const expected = crypto
-        .createHmac('sha256', secret)
-        .update(rawBodyBuffer)
-        .digest('hex');
+    let headers = {};
+    let path = '/api/payments/webhooks/fimipay';
 
-      const got = String(signatureHeader || '').replace(/^sha256=/, '').trim();
-
-      if (got.length !== expected.length) {
-        return false;
+    if (typeof reqOrHeaders === 'string') {
+      headers['x-fimipay-signature'] = reqOrHeaders;
+    } else if (reqOrHeaders && typeof reqOrHeaders === 'object') {
+      if (reqOrHeaders.headers) {
+        headers = reqOrHeaders.headers;
+        path = reqOrHeaders.originalUrl || reqOrHeaders.url || path;
+      } else {
+        headers = reqOrHeaders;
+        if (optionalPath) path = optionalPath;
       }
+    }
 
-      return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
-    } catch (err) {
-      console.error('[FimiPayProvider] Error verifying webhook signature:', err.message);
+    const sig1 = String(
+      headers['x-fimipay-signature'] ||
+      headers['x-signature'] ||
+      headers['x-webhook-signature'] ||
+      ''
+    ).replace(/^sha256=/, '').trim();
+
+    const sig2 = String(headers['x-fimipay-signature-v2'] || '').replace(/^sha256=/, '').trim();
+    const timestamp = String(headers['x-fimipay-timestamp'] || '').trim();
+    const nonce = String(headers['x-fimipay-nonce'] || '').trim();
+
+    const secrets = Array.from(new Set([
+      process.env.FIMIPAY_WEBHOOK_SECRET,
+      process.env.websec,
+      process.env.FIMIPAY_SECRET_KEY,
+      process.env.FIMIPAY_API_KEY,
+      process.env.SECRET_KEY,
+      FIMIPAY_WEBHOOK_SECRET,
+      FIMIPAY_SECRET_KEY
+    ].filter(Boolean)));
+
+    if (secrets.length === 0) {
+      console.warn('[FimiPayProvider] Webhook verification warning: No secrets configured in environment');
       return false;
     }
+
+    const rawString = Buffer.isBuffer(rawBodyBuffer) ? rawBodyBuffer.toString('utf8') : String(rawBodyBuffer || '');
+
+    for (const secret of secrets) {
+      try {
+        // 1. Try V1 Signature: HMAC-SHA256(rawBody, secret)
+        if (sig1) {
+          const expectedV1 = crypto.createHmac('sha256', secret).update(rawBodyBuffer).digest('hex');
+          if (expectedV1.length === sig1.length && crypto.timingSafeEqual(Buffer.from(sig1), Buffer.from(expectedV1))) {
+            return true;
+          }
+        }
+
+        // 2. Try V2 Signature: HMAC-SHA256("timestamp.nonce.path.rawBody", secret)
+        if (sig2 && timestamp && nonce) {
+          const payloadV2 = `${timestamp}.${nonce}.${path}.${rawString}`;
+          const expectedV2 = crypto.createHmac('sha256', secret).update(payloadV2).digest('hex');
+          if (expectedV2.length === sig2.length && crypto.timingSafeEqual(Buffer.from(sig2), Buffer.from(expectedV2))) {
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error('[FimiPayProvider] Error in HMAC calculation:', err.message);
+      }
+    }
+
+    console.warn('[FimiPayProvider] Webhook signature failed for all candidate secrets and headers.');
+    return false;
   }
 }
