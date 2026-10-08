@@ -608,6 +608,8 @@ app.patch('/api/merchants/:id', async (req, res) => {
 
 // --- SPLITS ---
 app.get('/api/splits', async (req, res) => {
+  const k = process.env.ADMIN_KEY;
+  if (!k || !safeEq(req.get('x-admin-key'), k)) return res.status(403).json({ error: 'Forbidden' });
   try {
     const query = `
       SELECT s.*,
@@ -642,7 +644,7 @@ app.get('/api/splits/ref/:refCode', async (req, res) => {
     const itemsQuery = 'SELECT * FROM allocation_items WHERE split_id = $1 ORDER BY created_at ASC';
     const { rows: items } = await pool.query(itemsQuery, [split.id]);
 
-    res.json({ ...split, participants, items });
+    { const { organizer_phone, ...pubSplit } = split; res.json({ ...pubSplit, participants: participants.map(({ phone, payment_ref, ...p }) => p), items }); }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -667,7 +669,7 @@ app.get('/api/splits/:id', async (req, res) => {
     const itemsQuery = 'SELECT * FROM allocation_items WHERE split_id = $1 ORDER BY created_at ASC';
     const { rows: items } = await pool.query(itemsQuery, [split.id]);
 
-    res.json({ ...split, participants, items });
+    { const { organizer_phone, ...pubSplit } = split; res.json({ ...pubSplit, participants: participants.map(({ phone, payment_ref, ...p }) => p), items }); }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
