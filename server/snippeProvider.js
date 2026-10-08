@@ -1,7 +1,12 @@
-import crypto from 'crypto';
+function getAuthHeader() {
+  let key = (process.env.SNIPPE_API_KEY || '').trim();
+  key = key.replace(/^["']|["']$/g, '').trim();
+  if (!key) return '';
+  if (key.toLowerCase().startsWith('bearer ')) return key;
+  return `Bearer ${key}`;
+}
 
 const SNIPPE_BASE_URL = process.env.SNIPPE_API_URL || 'https://api.snippe.sh';
-const SNIPPE_API_KEY = process.env.SNIPPE_API_KEY || '';
 const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || '';
 
 export class SnippePaymentProvider {
@@ -53,7 +58,7 @@ export class SnippePaymentProvider {
       const response = await fetch(`${SNIPPE_BASE_URL}/v1/payments`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json',
           'Idempotency-Key': validIdempotencyKey
         },
@@ -97,7 +102,7 @@ export class SnippePaymentProvider {
       const res = await fetch(`${SNIPPE_BASE_URL}/v1/payments/${encodeURIComponent(reference)}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json'
         }
       });
@@ -182,7 +187,7 @@ export class SnippePaymentProvider {
       const response = await fetch(`${SNIPPE_BASE_URL}/v1/payouts/send`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json',
           'Idempotency-Key': validIdempotencyKey
         },
@@ -231,7 +236,7 @@ export class SnippePaymentProvider {
       const res = await fetch(`${SNIPPE_BASE_URL}/v1/payouts/${encodeURIComponent(reference)}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json'
         }
       });
@@ -263,7 +268,7 @@ export class SnippePaymentProvider {
       const res = await fetch(`${SNIPPE_BASE_URL}/v1/payouts/fee?amount=${Math.round(amount)}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json'
         }
       });
@@ -294,7 +299,7 @@ export class SnippePaymentProvider {
       const res = await fetch(`${SNIPPE_BASE_URL}/v1/balance`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Authorization': getAuthHeader(),
           'Content-Type': 'application/json'
         }
       });
