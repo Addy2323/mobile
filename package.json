@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy": "vite build && rsync -a --delete dist/ /var/www/lumosplit/ && pm2 restart lumosplit-api"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
