@@ -9,6 +9,7 @@ import AdminView from '@/views/AdminView';
 import LoginView from '@/views/LoginView';
 import MoneyFlowView, { type MoneyFlowMode } from '@/views/MoneyFlowView';
 import FriendPaymentView from '@/views/FriendPaymentView';
+import { FriendPaymentScreen } from '@/mobile/screens/FriendPaymentScreen';
 import type { Split, Participant } from '@/lib/supabase';
 
 import ActivityView from '@/views/ActivityView';
@@ -41,7 +42,9 @@ export default function App() {
 
   if (publicToken) {
     return (
-      <FriendPaymentView token={publicToken} />
+      /^PL-/i.test(publicToken)
+        ? <FriendPaymentScreen token={publicToken} onBackToSplit={() => { window.location.href = '/'; }} />
+        : <FriendPaymentView token={publicToken} />
     );
   }
 
