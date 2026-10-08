@@ -323,7 +323,7 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
     const { phone, payment_method = 'M-Pesa' } = req.body;
 
     if (!phone) {
-      client.release();
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Phone number is required.' });
     }
 
@@ -335,20 +335,17 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
 
       if (link.status === 'REVOKED') {
         await client.query('ROLLBACK');
-        client.release();
         return res.status(400).json({ error: 'Payment link has been revoked.' });
       }
 
       if (link.expiration_mode === 'AFTER_PAYMENT' && link.status === 'PAID') {
         await client.query('ROLLBACK');
-        client.release();
         return res.status(400).json({ error: 'Payment link already used.' });
       }
 
       if (link.expires_at && new Date(link.expires_at) < new Date()) {
         await client.query("UPDATE payment_links SET status = 'EXPIRED' WHERE id = $1", [link.id]);
         await client.query('COMMIT');
-        client.release();
         return res.status(400).json({ error: 'Payment link has expired.' });
       }
 
@@ -369,7 +366,6 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
       );
 
       await client.query('COMMIT');
-      client.release();
 
       return res.json({
         success: true,
@@ -381,12 +377,13 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
     }
 
     await client.query('ROLLBACK');
-    client.release();
     return res.status(404).json({ error: 'Payment link not found.' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('payment link pay failed:', err);
+    res.status(500).json({ error: 'Payment failed.' });
+  } finally {
     client.release();
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1039,7 +1036,6 @@ app.post('/api/payments/initiate', async (req, res) => {
     const { split_participant_id, phone, payment_method = 'M-Pesa' } = req.body;
 
     if (!split_participant_id || !phone) {
-      client.release();
       return res.status(400).json({ error: 'split_participant_id and phone are required.' });
     }
 
@@ -1053,14 +1049,12 @@ app.post('/api/payments/initiate', async (req, res) => {
     );
 
     if (pRes.rows.length === 0) {
-      client.release();
       return res.status(404).json({ error: 'Participant record not found.' });
     }
 
     const participant = pRes.rows[0];
 
     if (participant.status === 'PAID') {
-      client.release();
       return res.status(400).json({ error: 'Participant obligation has already been PAID.' });
     }
 
@@ -1093,7 +1087,6 @@ app.post('/api/payments/initiate', async (req, res) => {
       [split_participant_id, expectedAmount, snippeRes.providerTxRef, payment_method, idempotencyKey]
     );
 
-    client.release();
     res.status(201).json({
       success: true,
       message: 'Payment prompt dispatched successfully.',
@@ -1101,9 +1094,10 @@ app.post('/api/payments/initiate', async (req, res) => {
       providerTxRef: snippeRes.providerTxRef
     });
   } catch (err) {
-    client.release();
     console.error('Error initiating Snippe payment:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Could not start payment.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1495,15 +1489,14 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
         [participantId]
       );
 
-      if (pRes.rows.length === 0) { client.release(); return res.status(404).json({ error: 'Participant not found.' }); }
-      if (pRes.rows[0].status === 'PAID') { client.release(); return res.status(400).json({ error: 'Already paid.' }); }
+      if (pRes.rows.length === 0) { return res.status(404).json({ error: 'Participant not found.' }); }
+      if (pRes.rows[0].status === 'PAID') { return res.status(400).json({ error: 'Already paid.' }); }
       targetAmount = parseInt(pRes.rows[0].allocation_amount, 10);
     }
 
-    if (!participantId) { client.release(); return res.status(400).json({ error: 'split_participant_id is required.' }); }
+    if (!participantId) { return res.status(400).json({ error: 'split_participant_id is required.' }); }
 
     if (!targetPhone || !targetAmount) {
-      client.release();
       return res.status(400).json({ error: 'buyer_phone (or phone) and amount are required.' });
     }
 
@@ -1552,7 +1545,6 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
       }
     }
 
-    client.release();
     res.status(200).json({
       success: true,
       order_id: fpResult.orderId,
@@ -1561,9 +1553,10 @@ app.post(['/api/payments/fimipay/create-order', '/api/payments/fimipay/create_or
       data: fpResult.data
     });
   } catch (err) {
-    client.release();
     console.error('Error creating FimiPay order:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Could not create payment order.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1685,7 +1678,6 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
     const existingEvt = await client.query('SELECT 1 FROM webhook_events WHERE event_id = $1', [eventId]);
     if (existingEvt.rows.length > 0) {
       await client.query('COMMIT');
-      client.release();
       return res.status(200).json({ received: true, note: 'Event already processed' });
     }
 
@@ -1710,13 +1702,13 @@ app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (re
     }
 
     await client.query('COMMIT');
-    client.release();
     res.status(200).json({ received: true });
   } catch (err) {
-    await client.query('ROLLBACK');
-    client.release();
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Error processing FimiPay webhook:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  } finally {
+    client.release();
   }
 });
 
