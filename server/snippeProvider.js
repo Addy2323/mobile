@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 
 const SNIPPE_BASE_URL = process.env.SNIPPE_API_URL || 'https://api.snippe.sh';
-const SNIPPE_API_KEY = process.env.SNIPPE_API_KEY || 'sn_live_demo_key_tzs_2026';
-const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || 'whsec_demo_secret_key_tzs_2026';
+const SNIPPE_API_KEY = process.env.SNIPPE_API_KEY || '';
+const SNIPPE_WEBHOOK_SECRET = process.env.SNIPPE_WEBHOOK_SECRET || '';
 
 export class SnippePaymentProvider {
   /**
@@ -83,6 +83,7 @@ export class SnippePaymentProvider {
    */
   static verifyWebhookSignature(rawBodyBuffer, signatureHeader) {
     if (!signatureHeader || !rawBodyBuffer) return false;
+    if (!SNIPPE_WEBHOOK_SECRET) return false;
     try {
       const computedSignature = crypto
         .createHmac('sha256', SNIPPE_WEBHOOK_SECRET)
@@ -94,8 +95,7 @@ export class SnippePaymentProvider {
       return crypto.timingSafeEqual(Buffer.from(computedSignature), Buffer.from(cleanSig));
     } catch (err) {
       console.error('[SnippeProvider] Webhook signature verification error:', err.message);
-      // In sandbox mode without production key, fallback to true if header exists
-      return true;
+      return false;
     }
   }
 

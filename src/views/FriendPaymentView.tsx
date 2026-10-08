@@ -15,7 +15,7 @@ import {
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
 
-type Stage = 'loading' | 'not_found' | 'select' | 'processing' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
+type Stage = 'choose' | 'loading' | 'not_found' | 'select' | 'processing' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
 
 type FriendPaymentViewProps = {
   token: string;
@@ -23,6 +23,7 @@ type FriendPaymentViewProps = {
 
 export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [stage, setStage] = useState<Stage>('loading');
+  const [others, setOthers] = useState<Participant[]>([]);
   const [split, setSplit] = useState<Split | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
@@ -61,16 +62,16 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       if (m) setMerchant(m as Merchant);
     }
 
-    const { data: participants } = await supabase
+    const { data: plist } = await supabase
       .from('split_participants')
       .select('*')
-      .eq('split_id', s.id)
-      .neq('is_organizer', true)
-      .limit(1)
-      .maybeSingle();
+      .eq('split_id', s.id);
+    const payers = (Array.isArray(plist) ? (plist as Participant[]) : []).filter((p) => !p.is_organizer);
+    setOthers(payers);
 
-    if (participants) {
-      const p = participants as Participant;
+    if (payers.length > 1) { setStage('choose'); return; }
+    if (payers.length === 1) {
+      const p = payers[0];
       setParticipant(p);
       if (p.status === 'PAID') { setStage('already_paid'); return; }
     }
@@ -124,7 +125,10 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     } else if (['snippe', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(provider)) {
       providerClient = new SnippePaymentProviderClient();
     } else {
-      providerClient = new MockPaymentProvider(false);
+      stopCountdown();
+      setError('This payment method is not available.');
+      setStage('select');
+      return;
     }
 
     const result = await providerClient.initiatePayment({
@@ -137,59 +141,46 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       participantName: participant.name,
       participantId: participant.id
     });
-
     setPaymentResult(result);
+
+    if (result.paymentGatewayUrl) {
+      stopCountdown();
+      window.location.href = result.paymentGatewayUrl;
+      return;
+    }
 
     if (result.status === 'FAILED') {
       stopCountdown();
-      await supabase.from('payment_attempts').insert({
-        split_participant_id: participant.id,
-        amount: payAmountNum,
-        provider: providerLabel,
-        provider_tx_ref: result.txRef,
-        status: 'FAILED',
-        payment_method: provider,
-        failure_code: result.failureCode || 'UNKNOWN',
-        idempotency_key: idempotencyKey,
-      });
       setStage('failed');
       return;
     }
 
-    if (result.status === 'SUCCESS') {
+    if (result.status === 'TIMEOUT') {
       stopCountdown();
-      const now = new Date().toISOString();
-      const newAmountPaid = participant.amount_paid + payAmountNum;
-      const isFullyPaid = newAmountPaid >= participant.allocation_amount;
-      setTxRef(result.txRef);
-      setParticipant({ ...participant, amount_paid: newAmountPaid, status: isFullyPaid ? 'PAID' : 'PENDING' });
-      setStage('success');
+      setStage('timeout');
       return;
     }
 
-    // PENDING status: Keep in 'processing' stage awaiting USSD push / Webhook settlement
-    const pollInterval = setInterval(async () => {
+    // Wait for the provider's signed webhook to mark the participant PAID on the server
+    setTxRef(result.txRef);
+    const deadline = Date.now() + 2 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       try {
-        const { data: pCheck } = await supabase
-          .from('split_participants')
-          .select('status, amount_paid, payment_ref')
-          .eq('id', participant.id)
-          .maybeSingle();
-
-        if (pCheck && pCheck.status === 'PAID') {
-          clearInterval(pollInterval);
+        const res = await fetch(`/api/participants/${participant.id}/status`);
+        const data = await res.json();
+        if (data.status === 'PAID') {
           stopCountdown();
-          setTxRef(pCheck.payment_ref || result.txRef);
-          setParticipant({ ...participant, amount_paid: pCheck.amount_paid || payAmountNum, status: 'PAID' });
+          setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
           setStage('success');
+          return;
         }
-      } catch (err) {
-        console.warn('Status poll error:', err);
+      } catch {
+        // keep waiting
       }
-    }, 2500);
-
-    // Clean up poll on unmount or stage change
-    setTimeout(() => clearInterval(pollInterval), 120000);
+    }
+    stopCountdown();
+    setStage('timeout');
   }
 
   function handleCancel() {
@@ -216,6 +207,30 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     setStage('select');
     setPaymentResult(null);
     setError('');
+  }
+
+  if (stage === 'choose') {
+    return (
+      <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
+        <h1 className="text-xl font-bold text-slate-900 mb-1">Who are you?</h1>
+        <p className="text-sm text-slate-500 mb-5">Pick your name to pay your share of "{split?.title}".</p>
+        <div className="space-y-2">
+          {others.map((p) => (
+            <button
+              key={p.id}
+              disabled={p.status === 'PAID'}
+              onClick={() => { setParticipant(p); setStage('select'); }}
+              className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left disabled:opacity-60"
+            >
+              <span className="font-semibold text-slate-900">{p.name}</span>
+              <span className="text-sm text-slate-500">
+                {p.status === 'PAID' ? 'Paid ✓' : formatMoney(Math.max(0, Number(p.allocation_amount || 0) - Number(p.amount_paid || 0)))}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (stage === 'loading') {
@@ -302,7 +317,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
 
       <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <h3 className="mb-3 text-sm font-bold text-slate-900">Choose provider</h3>
-        <div className="space-y-2">{Object.values(paymentProviders).map((p) => { const Icon = providerIcon(p.id); return <button key={p.id} onClick={() => setProvider(p.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition ${provider === p.id ? 'border-primary-300 bg-primary-50/50' : 'border-slate-100 hover:border-slate-200'}`}><div className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider === p.id ? 'bg-primary-100 text-primary-600' : 'bg-slate-50 text-slate-400'}`}><Icon className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-semibold text-slate-900">{p.label}</p><p className="text-xs text-slate-400">{p.desc}</p></div><div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${provider === p.id ? 'border-primary-600 bg-primary-600' : 'border-slate-200'}`}>{provider === p.id && <Check className="h-3 w-3 text-white" strokeWidth={3} />}</div></button>; })}</div>
+        <div className="space-y-2">{Object.values(paymentProviders).filter((p) => p.id === 'fimipay').map((p) => { const Icon = providerIcon(p.id); return <button key={p.id} onClick={() => setProvider(p.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition ${provider === p.id ? 'border-primary-300 bg-primary-50/50' : 'border-slate-100 hover:border-slate-200'}`}><div className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider === p.id ? 'bg-primary-100 text-primary-600' : 'bg-slate-50 text-slate-400'}`}><Icon className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-semibold text-slate-900">{p.label}</p><p className="text-xs text-slate-400">{p.desc}</p></div><div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${provider === p.id ? 'border-primary-600 bg-primary-600' : 'border-slate-200'}`}>{provider === p.id && <Check className="h-3 w-3 text-white" strokeWidth={3} />}</div></button>; })}</div>
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">

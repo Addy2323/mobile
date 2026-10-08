@@ -32,9 +32,7 @@ export default function App() {
 
   if (publicToken) {
     return (
-      <LayoutSwitch mobileView={<MobileShell />}>
-        <FriendPaymentView token={publicToken} />
-      </LayoutSwitch>
+      <FriendPaymentView token={publicToken} />
     );
   }
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { SnippePaymentProvider } from './snippeProvider.js';
 import { FimiPayProvider } from './fimipayProvider.js';
@@ -10,7 +11,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
-const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:myamba2323@localhost:5432/lumosprit_bd?schema=public';
+const dbUrl = process.env.DATABASE_URL;
 
 const pool = new pg.Pool({
   connectionString: dbUrl,
@@ -22,6 +23,30 @@ app.use('/api/payments/webhooks/snippe', express.raw({ type: 'application/json' 
 app.use('/api/payments/webhooks/fimipay', express.raw({ type: 'application/json' }));
 app.use('/webhooks/fimipay', express.raw({ type: 'application/json' }));
 app.use(express.json());
+
+// Block money-moving and destructive routes unless the admin key is sent
+const safeEq = (x, y) => {
+  const bx = Buffer.from(x || '');
+  const by = Buffer.from(y || '');
+  return bx.length === by.length && crypto.timingSafeEqual(bx, by);
+};
+app.use((req, res, next) => {
+  const p = req.path;
+  const sensitive =
+    req.method === 'DELETE' ||
+    p.startsWith('/api/payments/webhooks/snippe') ||
+    p === '/api/payments/initiate' ||
+    (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
+    (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
+    (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
+    (req.method === 'PATCH' && p.startsWith('/api/merchants')) ||
+    p.startsWith('/api/admin') ||
+    /^\/api\/payments\/fimipay\/(balance|balances|transactions|payouts)/.test(p);
+  if (!sensitive) return next();
+  const key = process.env.ADMIN_KEY;
+  if (key && safeEq(req.get('x-admin-key'), key)) return next();
+  return res.status(403).json({ error: 'Forbidden' });
+});
 
 // Helper for generating ref code if not provided
 function generateRefCode() {
@@ -833,12 +858,23 @@ app.get('/api/participants', async (req, res) => {
   }
 });
 
+app.get('/api/participants/:id/status', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT status FROM split_participants WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Participant not found' });
+    res.json({ status: rows[0].status });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.patch('/api/participants/:id', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const fields = req.body;
+    const BLOCKED = ['id','status','amount_paid','paid_at','payment_ref','split_id','allocation_amount','is_organizer'];
+    const fields = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => /^[a-z_]+$/.test(k) && !BLOCKED.includes(k)));
     const setClause = [];
     const values = [req.params.id];
 
@@ -1186,6 +1222,7 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
 
 // 3. Webhook Simulator (for instant frontend testing)
 app.post('/api/payments/simulate-webhook', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
   const { participant_id } = req.body;
   if (!participant_id) return res.status(400).json({ error: 'participant_id required' });
 

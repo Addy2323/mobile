@@ -114,7 +114,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       mode: method,
       organizer_name: organizerName,
       organizer_phone: organizerPhone,
-      status: 'Collecting',
+      status: 'ACTIVE',
       settlement_percent: 0,
       amount_paid: 0,
       participant_count: totalPeople,
@@ -137,29 +137,6 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         splitObj = data as Split;
       }
 
-      const participantRows = [
-        {
-          split_id: splitObj.id,
-          name: organizerName + ' (You)',
-          phone: organizerPhone,
-          allocation_amount: equalShare,
-          amount_paid: equalShare,
-          status: 'Paid',
-          is_organizer: true,
-        },
-        ...selectedContacts.map((c) => ({
-          split_id: splitObj.id,
-          name: c.name,
-          phone: c.phone,
-          allocation_amount: equalShare,
-          amount_paid: 0,
-          status: 'Pending',
-          is_organizer: false,
-        })),
-      ];
-
-      await supabase.from('split_participants').insert(participantRows);
-
       setCreatedSplit(splitObj);
       setStep(6);
     } catch (err) {
@@ -167,7 +144,9 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
     }
   };
 
-  const shareUrl = createdSplit ? `${window.location.origin}/s/${createdSplit.ref_code}` : `${window.location.origin}/s/DEMO`;
+  const shareUrl = createdSplit
+    ? `${window.location.origin}/s/${createdSplit.ref_code}`
+    : `${window.location.origin}/s/DEMO`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);

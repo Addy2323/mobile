@@ -112,7 +112,7 @@ export class FimiPayProvider {
     if (buyer_name) payload.buyer_name = buyer_name;
     if (buyer_email) payload.buyer_email = buyer_email;
     if (redirect_url) payload.redirect_url = redirect_url;
-    if (test_outcome) payload.test_outcome = test_outcome;
+    if (test_outcome && process.env.NODE_ENV !== 'production') payload.test_outcome = test_outcome;
 
     console.log(`[FimiPayProvider] Creating order ${cleanOrderId} for ${formattedPhone} (amount: ${amount}):`, payload);
 
@@ -336,6 +336,8 @@ export class FimiPayProvider {
       return false;
     }
 
+    if (!FIMIPAY_WEBHOOK_SECRET) return false;
+
     try {
       const computedSignature = crypto
         .createHmac('sha256', FIMIPAY_WEBHOOK_SECRET)
@@ -355,7 +357,7 @@ export class FimiPayProvider {
       return crypto.timingSafeEqual(computedBuf, headerBuf);
     } catch (err) {
       console.error('[FimiPayProvider] Error verifying webhook signature:', err.message);
-      return true;
+      return false;
     }
   }
 }
