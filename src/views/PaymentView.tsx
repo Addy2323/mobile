@@ -50,19 +50,41 @@ export default function PaymentView({ split, participant: initialParticipant, on
     const timer = setInterval(async () => {
       tries++;
       try {
+        // 1. Check dedicated payment status endpoint if reference exists
+        if (paymentRef) {
+          const pRes = await fetch(`/api/payments/${encodeURIComponent(paymentRef)}/status`);
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.isPaid || pData.status === 'COMPLETED') {
+              clearInterval(timer);
+              setStage('success');
+              return;
+            }
+            if (pData.isFailed || pData.status === 'FAILED') {
+              clearInterval(timer);
+              setStage('failed');
+              return;
+            }
+          }
+        }
+
+        // 2. Check participant status endpoint
         const res = await fetch(`/api/participants/${participant.id}/status`);
         const data = await res.json();
-        if (data.status === 'PAID') {
+        if (data.status === 'PAID' || data.is_paid) {
           clearInterval(timer);
           setStage('success');
+        } else if (data.status === 'FAILED') {
+          clearInterval(timer);
+          setStage('failed');
         }
       } catch (err) {
         console.error('Status check failed:', err);
       }
-      if (tries >= 100) clearInterval(timer);
-    }, 3000);
+      if (tries >= 120) clearInterval(timer);
+    }, 2500);
     return () => clearInterval(timer);
-  }, [stage, participant.id]);
+  }, [stage, participant.id, paymentRef]);
 
   async function handlePay() {
     if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 9) {

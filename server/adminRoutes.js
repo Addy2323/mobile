@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { createAdminAuthMiddleware, requirePermission, logAdminAuditAction, hashPassword } from './adminAuth.js';
+import { ApplicationIntegrationService } from './applicationIntegrationService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lumo_split_admin_jwt_secret_key_2026';
 
@@ -678,5 +679,50 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // -------------------------------------------------------------
+  // WEBSITE INTEGRATIONS MANAGEMENT
+  // -------------------------------------------------------------
+  router.get('/integrations', requirePermission('providers.view'), async (req, res) => {
+    try {
+      const integrations = await ApplicationIntegrationService.getAllIntegrations(pool);
+      res.json(integrations);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/integrations', requirePermission('providers.view'), async (req, res) => {
+    try {
+      const { applicationKey, displayName, websiteDomain, webhookUrl, redirectUrl, isActive } = req.body;
+      if (!applicationKey || !displayName || !websiteDomain || !webhookUrl) {
+        return res.status(400).json({ error: 'applicationKey, displayName, websiteDomain, and webhookUrl are required' });
+      }
+
+      const integration = await ApplicationIntegrationService.upsertIntegration(pool, {
+        applicationKey,
+        displayName,
+        websiteDomain,
+        webhookUrl,
+        redirectUrl,
+        isActive
+      });
+
+      await logAdminAuditAction(pool, {
+        adminUserId: req.adminUser.id,
+        adminEmail: req.adminUser.email,
+        action: 'INTEGRATION_CONFIGURED',
+        resourceType: 'integration',
+        resourceId: integration.applicationKey,
+        afterState: integration,
+        ipAddress: req.ip
+      });
+
+      res.status(201).json(integration);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   return router;
 }
+

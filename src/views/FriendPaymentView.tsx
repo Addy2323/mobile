@@ -112,7 +112,34 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     const checkOrderId = orderId || txRef;
 
     try {
-      // 1. Check API endpoint
+      // 1. Check dedicated payment status endpoint first if orderId exists
+      if (checkOrderId) {
+        const pRes = await fetch(`/api/payments/${encodeURIComponent(checkOrderId)}/status`);
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          if (pData.isPaid || pData.status === 'COMPLETED') {
+            stopCountdown();
+            setParticipant({ ...participant, amount_paid: participant.allocation_amount, status: 'PAID' });
+            setStage('success');
+            setIsCheckingStatus(false);
+            return true;
+          }
+          if (pData.isFailed || pData.status === 'FAILED') {
+            stopCountdown();
+            setPaymentResult({
+              status: 'FAILED',
+              txRef: checkOrderId,
+              failureCode: 'CANCELLED',
+              failureMessage: 'Payment was cancelled or rejected on your phone.'
+            });
+            setStage('failed');
+            setIsCheckingStatus(false);
+            return true;
+          }
+        }
+      }
+
+      // 2. Check participant status endpoint
       const res = await fetch(`/api/participants/${participant.id}/status`);
       if (res.ok) {
         const data = await res.json();
@@ -137,7 +164,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
         }
       }
 
-      // 2. Fallback: query Supabase directly
+      // 3. Fallback: query Supabase directly
       const { data: dbPart } = await supabase
         .from('split_participants')
         .select('status, amount_paid, allocation_amount')

@@ -9,7 +9,9 @@ function getAuthHeader() {
 }
 
 const SNIPPE_BASE_URL = (process.env.SNIPPE_API_URL || process.env.SNIPPE_BASE_URL || 'https://api.snippe.sh').trim();
-const SNIPPE_WEBHOOK_SECRET = (process.env.SNIPPE_WEBHOOK_SECRET || process.env.SNIPPE_SECRET_KEY || '').trim();
+function getWebhookSecret() {
+  return (process.env.SNIPPE_WEBHOOK_SECRET || process.env.SNIPPE_SECRET_KEY || '').trim();
+}
 
 export class SnippePaymentProvider {
   /**
@@ -24,6 +26,7 @@ export class SnippePaymentProvider {
 
   /**
    * 1) Initiates a mobile money collection payment via Snippe API v2026-01-25 (POST /v1/payments)
+   * Dynamically passes application webhook URL and standardized metadata structure.
    */
   static async initiatePayment({
     amount,
@@ -33,7 +36,12 @@ export class SnippePaymentProvider {
     participantId,
     participantName,
     buyerEmail,
-    idempotencyKey
+    idempotencyKey,
+    webhookUrl,
+    applicationKey,
+    resourceType,
+    resourceId,
+    internalPaymentId
   }) {
     const numericAmount = Math.round(amount);
 
@@ -58,11 +66,13 @@ export class SnippePaymentProvider {
     const firstname = nameParts[0] || 'Guest';
     const lastname = nameParts.slice(1).join(' ') || 'User';
 
+    const resolvedWebhookUrl = (webhookUrl || process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim();
+
     const payload = {
       payment_type: 'mobile',
       details: {
         amount: numericAmount,
-        currency: 'TZS'
+        currency: currency || 'TZS'
       },
       phone_number: cleanPhone,
       customer: {
@@ -70,8 +80,12 @@ export class SnippePaymentProvider {
         lastname,
         email: buyerEmail || 'guest@lumo.co.tz'
       },
-      webhook_url: (process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim(),
+      webhook_url: resolvedWebhookUrl,
       metadata: {
+        application: applicationKey || 'lumo-split',
+        internal_payment_id: internalPaymentId || participantId || `payment_${Date.now()}`,
+        resource_type: resourceType || 'split',
+        resource_id: resourceId || splitId || '',
         split_id: splitId,
         participant_id: participantId,
         participant_name: participantName
@@ -79,7 +93,7 @@ export class SnippePaymentProvider {
     };
 
     const validIdempotencyKey = this.formatIdempotencyKey(idempotencyKey, 'pay');
-    console.log(`[SnippeProvider] Initiating payment for participant ${participantId}:`, payload);
+    console.log(`[SnippeProvider] Initiating payment for internal_payment_id ${payload.metadata.internal_payment_id} to ${resolvedWebhookUrl}:`, payload);
 
     try {
       const response = await fetch(`${SNIPPE_BASE_URL}/v1/payments`, {
@@ -112,6 +126,7 @@ export class SnippePaymentProvider {
       return {
         status: isSuccess ? 'SUCCESS' : 'PENDING',
         providerTxRef: pData.reference || pData.id || `SNP-TX-${Date.now().toString().slice(-8)}`,
+        webhookUrlUsed: resolvedWebhookUrl,
         message: body.message || 'USSD Push prompt sent to user phone.'
       };
     } catch (err) {
@@ -140,25 +155,26 @@ export class SnippePaymentProvider {
       });
 
       if (!res.ok) {
-        return { success: false, isPaid: false, paymentStatus: 'PENDING' };
+        return { success: false, isPaid: false, isFailed: false, paymentStatus: 'PENDING' };
       }
 
       const body = await res.json();
       const dataObj = body.data || body;
       const rawStatus = (dataObj.status || 'pending').toLowerCase();
-      const isPaid = rawStatus === 'completed';
-      const isFailed = ['failed', 'voided', 'expired'].includes(rawStatus);
+      const isPaid = ['completed', 'success'].includes(rawStatus);
+      const isFailed = ['failed', 'voided', 'expired', 'cancelled', 'rejected'].includes(rawStatus);
 
       return {
         success: true,
         reference,
         paymentStatus: isPaid ? 'SUCCESS' : isFailed ? 'FAILED' : 'PENDING',
+        rawStatus,
         isPaid,
         isFailed,
         data: dataObj
       };
     } catch (err) {
-      return { success: false, isPaid: false, paymentStatus: 'PENDING', error: err.message };
+      return { success: false, isPaid: false, isFailed: false, paymentStatus: 'PENDING', error: err.message };
     }
   }
 
@@ -168,14 +184,15 @@ export class SnippePaymentProvider {
   static async sendPayout({
     splitId,
     amount,
-    channel = 'mobile', // 'mobile' or 'bank'
+    channel = 'mobile',
     mobileProvider = 'airtel',
     bankCode = 'CRDB',
     recipientPhone,
     recipientBank,
     recipientAccount,
     recipientName,
-    idempotencyKey
+    idempotencyKey,
+    webhookUrl
   }) {
     const numericAmount = Math.round(amount);
 
@@ -193,6 +210,7 @@ export class SnippePaymentProvider {
     if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.slice(1);
     if (!cleanPhone.startsWith('255') && cleanPhone.length === 9) cleanPhone = '255' + cleanPhone;
 
+    const resolvedWebhookUrl = (webhookUrl || process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim();
     const isBank = channel === 'bank';
     const payload = isBank
       ? {
@@ -202,7 +220,7 @@ export class SnippePaymentProvider {
           recipient_account: recipientAccount,
           recipient_name: recipientName || 'LUMO Split Beneficiary',
           narration: `LUMO Split ${splitId || ''} Settlement`.slice(0, 64),
-          webhook_url: (process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim(),
+          webhook_url: resolvedWebhookUrl,
           metadata: { split_id: splitId }
         }
       : {
@@ -211,12 +229,11 @@ export class SnippePaymentProvider {
           recipient_phone: cleanPhone,
           recipient_name: recipientName || 'LUMO Split Beneficiary',
           narration: `LUMO Split ${splitId || ''} Settlement`.slice(0, 64),
-          webhook_url: (process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim(),
+          webhook_url: resolvedWebhookUrl,
           metadata: { split_id: splitId }
         };
 
     const validIdempotencyKey = this.formatIdempotencyKey(idempotencyKey || `payout_${splitId || Date.now()}`, 'payout');
-    console.log(`[SnippeProvider] Initiating Payout of TZS ${numericAmount}:`, payload);
 
     try {
       const response = await fetch(`${SNIPPE_BASE_URL}/v1/payouts/send`, {
@@ -361,27 +378,47 @@ export class SnippePaymentProvider {
    * 7) Verifies Snippe Webhook HMAC-SHA256 signature (v2026-01-25)
    * Header format: X-Webhook-Timestamp and X-Webhook-Signature
    * Signature payload: "${timestamp}.${raw_body}"
+   * Includes timestamp freshness check (<5 mins) for replay attack prevention.
    */
   static verifyWebhookSignature(rawBodyBuffer, reqOrHeader) {
-    const headers = typeof reqOrHeader === 'object' && reqOrHeader?.headers ? reqOrHeader.headers : {};
+    const headers = typeof reqOrHeader === 'object' && reqOrHeader?.headers ? reqOrHeader.headers : (reqOrHeader || {});
     
     const signature = headers['x-webhook-signature'] || headers['x-snippe-signature'] || headers['x-signature'];
     const timestamp = headers['x-webhook-timestamp'] || headers['x-timestamp'];
 
-    if (!signature || !rawBodyBuffer) return false;
-    if (!SNIPPE_WEBHOOK_SECRET) return true; // Accept in dev if secret not configured
+    if (!signature || rawBodyBuffer === undefined || rawBodyBuffer === null) return false;
+    
+    const secret = getWebhookSecret();
+    if (!secret) return true; // Accept in dev if secret not configured
+
+    // Verify timestamp freshness window (5 minutes / 300 seconds) if timestamp header provided
+    if (timestamp) {
+      const reqTimeSec = Number(timestamp);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!isNaN(reqTimeSec) && Math.abs(nowSec - reqTimeSec) > 300) {
+        console.warn(`[SnippeProvider] Webhook signature rejected: timestamp difference ${Math.abs(nowSec - reqTimeSec)}s exceeds 300s threshold`);
+        return false;
+      }
+    }
 
     try {
       const rawString = typeof rawBodyBuffer === 'string' ? rawBodyBuffer : rawBodyBuffer.toString('utf8');
       const message = timestamp ? `${timestamp}.${rawString}` : rawString;
       
       const computedSignature = crypto
-        .createHmac('sha256', SNIPPE_WEBHOOK_SECRET)
+        .createHmac('sha256', secret)
         .update(message)
         .digest('hex');
 
-      const cleanSig = signature.replace(/^sha256=/, '').trim();
-      return crypto.timingSafeEqual(Buffer.from(computedSignature), Buffer.from(cleanSig));
+      const cleanSig = String(signature).replace(/^sha256=/, '').trim();
+      const bufComputed = Buffer.from(computedSignature, 'utf8');
+      const bufClean = Buffer.from(cleanSig, 'utf8');
+
+      if (bufComputed.length !== bufClean.length) {
+        return false;
+      }
+
+      return crypto.timingSafeEqual(bufComputed, bufClean);
     } catch (err) {
       console.error('[SnippeProvider] Webhook signature verification error:', err.message);
       return false;
