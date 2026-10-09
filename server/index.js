@@ -25,6 +25,49 @@ const pool = new pg.Pool({
   connectionString: dbUrl,
 });
 
+// Auto-run schema migrations on server startup to guarantee missing columns/tables exist
+async function autoMigrateOnStartup(p) {
+  try {
+    console.log('[Auto-Migrate] Checking and ensuring database schema compliance...');
+    await p.query(`
+      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      CREATE TABLE IF NOT EXISTS application_integrations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        application_key VARCHAR(64) UNIQUE NOT NULL,
+        display_name VARCHAR(128) NOT NULL,
+        website_domain VARCHAR(255) NOT NULL,
+        webhook_url TEXT NOT NULL,
+        redirect_url TEXT,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS application_id VARCHAR(64);
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS webhook_url_used TEXT;
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS resource_type VARCHAR(64);
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS resource_id VARCHAR(128);
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS merchant_reference VARCHAR(128);
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMPTZ;
+
+      ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS signature_verified BOOLEAN DEFAULT false;
+      ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ DEFAULT NOW();
+
+      INSERT INTO application_integrations (application_key, display_name, website_domain, webhook_url, redirect_url)
+      VALUES 
+        ('lumo-split', 'LUMO Split Core App', 'nosplit.lumo.co.tz', 'https://nosplit.lumo.co.tz/api/webhooks/snippe', 'https://nosplit.lumo.co.tz'),
+        ('mhema-logistics', 'Mhema Logistics', 'mhemalogistics.co.tz', 'https://mhemalogistics.co.tz/api/webhooks/snippe', 'https://mhemalogistics.co.tz')
+      ON CONFLICT (application_key) DO NOTHING;
+    `);
+    console.log('✅ [Auto-Migrate] Database schema auto-migration completed successfully.');
+  } catch (err) {
+    console.warn('⚠️ [Auto-Migrate Notice]:', err.message);
+  }
+}
+
+autoMigrateOnStartup(pool);
+
 app.use(cors());
 // Raw body parser for Snippe HMAC webhook verification
 app.use('/api/payments/webhooks/snippe', express.raw({ type: 'application/json' }));
