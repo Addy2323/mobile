@@ -1485,7 +1485,7 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
 
     // 2. Lookup via payment_attempts
     if (!pId) {
-      const paCheck = await client.query('SELECT split_participant_id FROM payment_attempts WHERE idempotency_key = $1 OR provider_tx_ref = $1 LIMIT 1', [orderId]);
+      const paCheck = await client.query('SELECT split_participant_id FROM payment_attempts WHERE idempotency_key = $1 OR provider_tx_ref = $1 OR merchant_reference = $1 LIMIT 1', [orderId]);
       if (paCheck.rows.length > 0) {
         pId = paCheck.rows[0].split_participant_id;
       }
@@ -1539,8 +1539,11 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   // Update PaymentAttempt
   await client.query(
     `UPDATE payment_attempts
-     SET status = 'SUCCESS', completed_at = NOW(), provider_tx_ref = $1
-     WHERE (split_participant_id = $2 AND status = 'PENDING') OR idempotency_key = $3`,
+     SET status = 'COMPLETED', completed_at = NOW(), provider_tx_ref = COALESCE($1, provider_tx_ref), updated_at = NOW()
+     WHERE (split_participant_id = $2 AND status IN ('PENDING', 'PROCESSING', 'CREATED'))
+        OR idempotency_key = $3
+        OR merchant_reference = $3
+        OR provider_tx_ref = $3`,
     [providerTxRef || orderId, pId, orderId]
   );
 
@@ -1931,25 +1934,34 @@ app.get('/api/participants/:id/status', async (req, res) => {
       try {
         const attRes = await pool.query(
           `SELECT provider_tx_ref, merchant_reference, idempotency_key, provider FROM payment_attempts 
-           WHERE split_participant_id = $1 ORDER BY requested_at DESC LIMIT 1`,
+           WHERE split_participant_id = $1 ORDER BY COALESCE(requested_at, created_at) DESC LIMIT 1`,
           [id]
         );
 
         if (attRes.rows.length > 0) {
           const attempt = attRes.rows[0];
-          const orderId = attempt.provider_tx_ref || attempt.merchant_reference || attempt.idempotency_key;
+          const primaryRef = attempt.provider_tx_ref || attempt.merchant_reference || attempt.idempotency_key;
           
-          if (attempt.provider === 'SNIPPE' && orderId) {
-            const snippeCheck = await SnippePaymentProvider.getPaymentStatus(orderId);
+          if (attempt.provider === 'SNIPPE' && primaryRef) {
+            let snippeCheck = await SnippePaymentProvider.getPaymentStatus(primaryRef);
+            
+            // If primaryRef didn't return paid, try merchant_reference as fallback
+            if (!snippeCheck.isPaid && attempt.merchant_reference && attempt.merchant_reference !== primaryRef) {
+              const fallbackCheck = await SnippePaymentProvider.getPaymentStatus(attempt.merchant_reference);
+              if (fallbackCheck.isPaid || fallbackCheck.isFailed) {
+                snippeCheck = fallbackCheck;
+              }
+            }
+
             if (snippeCheck.isPaid) {
               const client = await pool.connect();
               try {
                 await client.query('BEGIN');
                 await applySuccessfulPayment(client, {
-                  orderId,
+                  orderId: primaryRef,
                   participantId: id,
                   amountPaid: p.allocation_amount,
-                  providerTxRef: orderId
+                  providerTxRef: attempt.provider_tx_ref || primaryRef
                 });
                 await client.query('COMMIT');
                 p.status = 'PAID';
@@ -1974,7 +1986,7 @@ app.get('/api/participants/:id/status', async (req, res) => {
                 payment_ref: p.payment_ref
               });
             }
-          } else if (attempt.provider === 'FIMIPAY' && orderId) {
+          } else if (attempt.provider === 'FIMIPAY' && primaryRef) {
             const fpStatus = await FimiPayProvider.getOrderStatus(orderId);
             if (fpStatus.isPaid) {
               const client = await pool.connect();
