@@ -1570,12 +1570,11 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   );
 
   // Trigger automated payout settlement if destination snapshot exists
+  await client.query('SAVEPOINT settlement_sp');
   try {
     const destRes = await client.query(
-      `SELECT destination_snapshot FROM split_participants WHERE id = $1 
-       UNION ALL 
-       SELECT destination_snapshot FROM splits WHERE id = $2`,
-      [pId, splitId]
+      `SELECT destination_snapshot FROM splits WHERE id = $1`,
+      [splitId]
     );
     let dSnapshot = null;
     for (const r of destRes.rows) {
@@ -1594,6 +1593,7 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
       });
     }
   } catch (settleErr) {
+    await client.query('ROLLBACK TO SAVEPOINT settlement_sp').catch(() => {});
     console.warn('[Automated Settlement Notice]:', settleErr.message);
   }
 
@@ -1796,7 +1796,7 @@ app.get('/api/payments/:paymentId/status', async (req, res) => {
     const payment = rows[0];
 
     // If pending or processing, trigger live status reconciliation check with provider
-    if (['PENDING', 'PROCESSING', 'CREATED'].includes(payment.status) && payment.provider === 'SNIPPE') {
+    if (payment.provider === 'SNIPPE' && (['PENDING', 'PROCESSING', 'CREATED'].includes(payment.status) || (payment.status === 'COMPLETED' && payment.participant_status !== 'PAID'))) {
       const ref = payment.provider_tx_ref || payment.merchant_reference;
       if (ref) {
         const snippeCheck = await SnippePaymentProvider.getPaymentStatus(ref);
@@ -1819,10 +1819,11 @@ app.get('/api/payments/:paymentId/status', async (req, res) => {
             payment.participant_status = 'PAID';
           } catch (recErr) {
             await client.query('ROLLBACK').catch(() => {});
+            console.error('[Payment Status Recon Error]:', recErr.message);
           } finally {
             client.release();
           }
-        } else if (snippeCheck.isFailed) {
+        } else if (snippeCheck.isFailed && payment.status !== 'COMPLETED') {
           await pool.query("UPDATE payment_attempts SET status = 'FAILED', updated_at = NOW() WHERE id = $1", [payment.id]);
           payment.status = 'FAILED';
         }
@@ -1981,41 +1982,6 @@ app.get('/api/participants/:id/status', async (req, res) => {
                 payment_status: 'FAILED',
                 is_paid: false,
                 failure_reason: 'Payment failed or rejected on phone.',
-                amount_paid: p.amount_paid,
-                allocation_amount: p.allocation_amount,
-                payment_ref: p.payment_ref
-              });
-            }
-          } else if (attempt.provider === 'FIMIPAY' && primaryRef) {
-            const fpStatus = await FimiPayProvider.getOrderStatus(orderId);
-            if (fpStatus.isPaid) {
-              const client = await pool.connect();
-              try {
-                await client.query('BEGIN');
-                await applySuccessfulPayment(client, {
-                  orderId,
-                  participantId: id,
-                  amountPaid: fpStatus.data?.amount || p.allocation_amount,
-                  providerTxRef: orderId
-                });
-                await client.query('COMMIT');
-                p.status = 'PAID';
-                p.amount_paid = p.allocation_amount;
-              } catch (recErr) {
-                await client.query('ROLLBACK').catch(() => {});
-                console.error('[Participant Status Recon Error]:', recErr);
-              } finally {
-                client.release();
-              }
-            } else if (['CANCELLED', 'USERCANCELLED', 'REJECTED', 'FAILED', 'EXPIRED'].includes(fpStatus.paymentStatus)) {
-              return res.json({
-                id: p.id,
-                split_id: p.split_id,
-                name: p.name,
-                status: 'FAILED',
-                payment_status: fpStatus.paymentStatus,
-                is_paid: false,
-                failure_reason: 'Payment cancelled or rejected by user on phone.',
                 amount_paid: p.amount_paid,
                 allocation_amount: p.allocation_amount,
                 payment_ref: p.payment_ref

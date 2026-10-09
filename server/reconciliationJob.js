@@ -53,8 +53,8 @@ export class SnippeReconciliationJob {
               [reference, attempt.id]
             );
 
-            if (attempt.metadata?.participant_id) {
-              const partId = attempt.metadata.participant_id;
+            if (attempt.split_participant_id || attempt.metadata?.participant_id) {
+              const partId = attempt.split_participant_id || attempt.metadata.participant_id;
               const pRes = await client.query('SELECT * FROM split_participants WHERE id = $1 FOR UPDATE', [partId]);
               if (pRes.rows.length > 0) {
                 const participant = pRes.rows[0];
@@ -64,8 +64,8 @@ export class SnippeReconciliationJob {
                   `UPDATE split_participants
                    SET status = 'PAID',
                        amount_paid = $1,
-                       payment_ref = $2,
-                       updated_at = NOW()
+                       paid_at = NOW(),
+                       payment_ref = $2
                    WHERE id = $3`,
                   [allocAmount, reference, partId]
                 );
@@ -81,8 +81,7 @@ export class SnippeReconciliationJob {
 
                 await client.query(
                   `UPDATE splits
-                   SET amount_paid = $1,
-                       updated_at = NOW()
+                   SET amount_paid = $1
                    WHERE id = $2`,
                   [totalPaid, participant.split_id]
                 );
