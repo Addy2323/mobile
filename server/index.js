@@ -1046,7 +1046,7 @@ app.post('/api/payment-attempts', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
       RETURNING *
     `;
-    const completedAt = status === 'SUCCESS' ? new Date() : null;
+    const completedAt = ['SUCCESS','COMPLETED'].includes(status) ? new Date() : null;
     const { rows } = await pool.query(query, [
       split_participant_id,
       amount,
@@ -1208,7 +1208,7 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
         // Update PaymentAttempt to SUCCESS
         await client.query(
           `UPDATE payment_attempts
-           SET status = 'SUCCESS', completed_at = NOW()
+           SET status = 'COMPLETED', completed_at = NOW()
            WHERE split_participant_id = $1 AND status = 'PENDING'`,
           [participantId]
         );
@@ -1454,7 +1454,7 @@ app.get('/api/admin/metrics', async (req, res) => {
     const totalPaidRes = await pool.query('SELECT SUM(amount_paid) FROM splits');
     const merchantsCountRes = await pool.query('SELECT COUNT(*) FROM merchants');
     const participantsCountRes = await pool.query('SELECT COUNT(*) FROM split_participants');
-    const paymentsCountRes = await pool.query("SELECT COUNT(*) FROM payment_attempts WHERE status = 'SUCCESS'");
+    const paymentsCountRes = await pool.query("SELECT COUNT(*) FROM payment_attempts WHERE status IN ('SUCCESS','COMPLETED')");
 
     res.json({
       totalSplits: parseInt(splitsCountRes.rows[0].count, 10),
