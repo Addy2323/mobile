@@ -93,8 +93,7 @@ app.use((req, res, next) => {
     (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
     (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
-    (req.method === 'PATCH' && p.startsWith('/api/merchants')) ||
-    /^\/api\/payments\/fimipay\/(balance|balances|transactions|payouts)/.test(p);
+    (req.method === 'PATCH' && p.startsWith('/api/merchants'));
   if (!sensitive) return next();
   const key = process.env.ADMIN_KEY;
   if (key && safeEq(req.get('x-admin-key'), key)) return next();
@@ -1470,7 +1469,7 @@ app.get('/api/admin/metrics', async (req, res) => {
 });
 
 // ==========================================
-// --- FIMIPAY MERCHANT API v1 ENDPOINTS ---
+// --- PAYMENT CONFIRMATION HELPERS ---
 // ==========================================
 
 // Helper function to handle successful payment state updates
@@ -1514,7 +1513,7 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   }
 
   if (!pId) {
-    console.warn(`[FimiPay] Unable to resolve participant for orderId: ${orderId}`);
+    console.warn(`[Payment] Unable to resolve participant for orderId: ${orderId}`);
     return null;
   }
 
@@ -1525,7 +1524,7 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
   if (participant.status === 'PAID') return { splitId: participant.split_id, participantId: pId, alreadyPaid: true };
   const splitId = participant.split_id;
   if (amountPaid != null && Number(amountPaid) !== Number(participant.allocation_amount)) {
-    console.warn(`[FimiPay] Amount mismatch for ${orderId}: provider ${amountPaid}, expected ${participant.allocation_amount}`);
+    console.warn(`[Payment] Amount mismatch for ${orderId}: provider ${amountPaid}, expected ${participant.allocation_amount}`);
   }
   const finalPaid = amountPaid || participant.allocation_amount;
 
@@ -1848,73 +1847,6 @@ app.get('/api/payments/:paymentId/status', async (req, res) => {
   }
 });
 
-app.post(['/', '/api/payments/webhooks/fimipay', '/webhooks/fimipay'], async (req, res) => {
-  const rawBuffer = req.body;
-  const sigHeader =
-    req.headers['x-fimipay-signature'] ||
-    req.headers['x-signature'] ||
-    req.headers['x-webhook-signature'];
-
-  const isValid = FimiPayProvider.verifyWebhookSignature(rawBuffer, req);
-  if (!isValid) {
-    console.warn('⚠️ FimiPay Webhook signature verification failed.');
-    return res.status(401).json({ error: 'Invalid webhook signature.' });
-  }
-
-  let eventPayload;
-  try {
-    eventPayload = JSON.parse(rawBuffer.toString('utf8'));
-  } catch {
-    return res.status(400).json({ error: 'Invalid JSON payload.' });
-  }
-
-  console.log('[FimiPay Webhook Received]:', eventPayload);
-
-  // hardened:fimipay
-  const eventId = eventPayload.event_id || eventPayload.id || 'sha_' + crypto.createHash('sha256').update(rawBuffer).digest('hex');
-  const eventType = eventPayload.event_type || eventPayload.event || eventPayload.type || 'unknown';
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Idempotency Check
-    const existingEvt = await client.query('SELECT 1 FROM webhook_events WHERE event_id = $1', [eventId]);
-    if (existingEvt.rows.length > 0) {
-      await client.query('COMMIT');
-      return res.status(200).json({ received: true, note: 'Event already processed' });
-    }
-
-    await client.query(
-      `INSERT INTO webhook_events (event_id, provider, event_type, payload)
-       VALUES ($1, 'FIMIPAY', $2, $3)`,
-      [eventId, eventType, eventPayload]
-    );
-
-    const orderId = eventPayload.order_id || eventPayload.data?.order_id || eventPayload.orderId;
-    const paymentStatus = (eventPayload.payment_status || eventPayload.status || eventPayload.data?.payment_status || '').toUpperCase();
-    const amountPaid = eventPayload.amount || eventPayload.data?.amount;
-    const participantId = eventPayload.participant_id || eventPayload.data?.participant_id || eventPayload.metadata?.participant_id;
-
-    if (['SUCCESS', 'COMPLETED'].includes(paymentStatus) || (!paymentStatus && eventType === 'payment.success')) {
-      await applySuccessfulPayment(client, {
-        orderId,
-        participantId,
-        amountPaid,
-        providerTxRef: orderId || `FMP-TX-${Date.now()}`
-      });
-    }
-
-    await client.query('COMMIT');
-    res.status(200).json({ received: true });
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('Error processing FimiPay webhook:', err);
-    res.status(500).json({ error: 'Webhook processing failed.' });
-  } finally {
-    client.release();
-  }
-});
 
 // Participant Status API (GET /api/participants/:id/status)
 app.get('/api/participants/:id/status', async (req, res) => {

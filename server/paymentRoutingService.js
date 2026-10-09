@@ -23,10 +23,6 @@ export class ProviderCapabilityService {
       }
     }
 
-    if (p === 'FIMIPAY') {
-      return type === 'PHONE' || type === 'MOBILE_MONEY';
-    }
-
     return false;
   }
 
@@ -40,10 +36,6 @@ export class ProviderCapabilityService {
 
     if (p === 'SNIPPE') {
       return ['mobile', 'mobile_money', 'mpesa', 'airtel', 'mixx', 'halopesa'].includes(m);
-    }
-
-    if (p === 'FIMIPAY') {
-      return ['mobile', 'card', 'bank'].includes(m);
     }
 
     return true;

@@ -628,18 +628,11 @@ export function createAdminRouter(pool) {
   router.get('/providers', requirePermission('providers.view'), async (req, res) => {
     try {
       const snippeConfigured = !!process.env.SNIPPE_API_KEY;
-      const fimipayConfigured = !!process.env.FIMIPAY_API_KEY;
 
       res.json([
         {
           name: 'Snippe',
           status: snippeConfigured ? 'CONNECTED' : 'NOT_CONFIGURED',
-          environment: process.env.NODE_ENV || 'production',
-          lastWebhook: new Date().toISOString()
-        },
-        {
-          name: 'FimiPay',
-          status: fimipayConfigured ? 'CONNECTED' : 'NOT_CONFIGURED',
           environment: process.env.NODE_ENV || 'production',
           lastWebhook: new Date().toISOString()
         }

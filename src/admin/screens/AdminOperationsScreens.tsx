@@ -202,7 +202,7 @@ export const AdminSettlementsScreen: React.FC<OpsProps> = ({ token }) => {
               settlements.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-900/40">
                   <td className="p-4 font-mono text-indigo-400">{s.reference}</td>
-                  <td className="p-4 font-semibold">{s.provider || 'FIMIPAY'}</td>
+                  <td className="p-4 font-semibold">{s.provider || 'SNIPPE'}</td>
                   <td className="p-4 font-mono font-bold text-white">TZS {Number(s.amount).toLocaleString()}</td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${

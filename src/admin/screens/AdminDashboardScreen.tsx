@@ -200,7 +200,7 @@ export const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ toke
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <div>
               <div className="text-xs font-bold text-white">Payment Providers</div>
-              <div className="text-[10px] text-slate-400">Snippe & FimiPay Webhooks Operational</div>
+              <div className="text-[10px] text-slate-400">Snippe Webhooks Operational</div>
             </div>
           </div>
 
