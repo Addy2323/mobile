@@ -1583,7 +1583,7 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
         break;
       }
     }
-    if (dSnapshot) {
+    if (dSnapshot && process.env.AUTO_SETTLEMENT === 'true') {
       await SettlementRouter.processAutomatedSettlement(client, {
         paymentId: providerTxRef || orderId,
         participantId: pId,
