@@ -1236,7 +1236,7 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
         );
 
         // AUTOMATED SETTLEMENT DISPATCH: If split is 100% SETTLED, trigger payout to merchant
-        if (newStatus === 'SETTLED') {
+        if (newStatus === 'SETTLED' && process.env.ALLOW_LEGACY_PAYOUT === 'true') {
           console.log(`🎉 Split ${splitId} reached 100% SETTLED! Dispatching Automated Snippe Payout...`);
           const payoutRes = await SnippePaymentProvider.sendPayout({
             splitId: splitId,
