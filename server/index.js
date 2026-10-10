@@ -156,6 +156,7 @@ app.use((req, res, next) => {
     req.method === 'DELETE' ||
     p.startsWith('/api/payments/webhooks/snippe') ||
     p === '/api/payments/initiate' ||
+    p.startsWith('/api/user/') ||
     (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
     (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
