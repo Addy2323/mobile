@@ -130,68 +130,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         />
       )}
 
-      {/* Premium Hero Card with Restaurant Background & Navy Gradient */}
-      <div className="relative rounded-3xl overflow-hidden shadow-xl border border-slate-800/40 text-white min-h-[190px] flex flex-col justify-between p-6">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 bg-cover bg-center z-0 transition-transform duration-700 hover:scale-105"
-          style={{ backgroundImage: `url('/hero-bg.jpg')` }}
-        />
-
-        {/* 3-Stop Navy Gradient Overlay for optimal contrast */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07132B] via-[#0B1B40]/85 to-transparent z-[1]" />
-
-        {/* Top Badge & Micro-Status */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-slate-900/60 backdrop-blur-md rounded-full border border-blue-400/30 text-xs font-bold text-blue-200">
-            <span className="w-2 h-2 rounded-full bg-cyan-300 animate-pulse" />
-            <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-            <span>Instant Split Hub</span>
-          </div>
-
-          <div className="flex items-center space-x-1 text-[11px] font-medium text-blue-200/80 bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Protected</span>
-          </div>
-        </div>
-
-        {/* Content & Action */}
-        <div className="relative z-10 pt-4 space-y-3">
-          <div>
-            <h2 className="text-[24px] font-black tracking-tight leading-tight">
-              Split{' '}
-              <span className="bg-gradient-to-r from-[#60A5FA] via-[#93C5FD] to-white bg-clip-text text-transparent">
-                a Bill
-              </span>
-            </h2>
-            <p className="text-xs text-blue-100/80 mt-0.5 font-medium">
-              Share dining, utilities, & group expenses seamlessly.
-            </p>
-          </div>
-
-          <div className="pt-1">
-            <button
-              onClick={onCreate}
-              className="group inline-flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-[#FF6500] to-[#FF8533] text-white font-extrabold text-xs rounded-full shadow-lg shadow-black/25 active:scale-95 transition-all duration-200 hover:shadow-orange-500/25 hover:scale-[1.02]"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create New Split</span>
-              <ArrowUpRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Quick Action Tile Grid */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
             Quick Services
           </h3>
-          <span className="text-[11px] text-slate-400 font-semibold">4 Instant Actions</span>
+          <span className="text-[11px] text-slate-400 font-semibold">5 Instant Actions</span>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          {/* Split a Bill (Primary Action Tile) */}
+          <button
+            onClick={onCreate}
+            className="bg-[#07132B] p-4 rounded-2xl border border-blue-500/30 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group col-span-2 sm:col-span-1"
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2.5 bg-orange-500/20 text-orange-400 rounded-xl border border-orange-500/30 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                <Plus className="w-5 h-5 stroke-[3]" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-orange-400 transition-colors" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-white text-sm flex items-center space-x-1.5">
+                <span>Split a Bill</span>
+                <span className="px-1.5 py-0.2 bg-orange-500/30 text-orange-300 text-[9px] rounded font-mono">NEW</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-0.5">Share dining, utilities & group expenses</p>
+            </div>
+          </button>
+
           {/* Pay Link */}
           <button
             onClick={() => onNavigateQuickAction?.('payLink')}

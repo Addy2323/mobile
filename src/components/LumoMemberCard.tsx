@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Plus, ArrowUpRight, ShieldCheck, Sparkles, Copy, Check, Wifi, Award } from 'lucide-react';
+import { Eye, EyeOff, Plus, ArrowUpRight, ShieldCheck, Copy, Check, Award } from 'lucide-react';
 import { fetchUserCardBalance, UserCardBalance } from '../lib/ledgerApi';
 
 interface LumoMemberCardProps {
@@ -9,36 +9,31 @@ interface LumoMemberCardProps {
   refreshTrigger?: number;
 }
 
-export const VIP_TIER_STYLES: Record<string, { label: string; bgClass: string; badgeClass: string; accentGlow: string }> = {
+export const VIP_TIER_STYLES: Record<string, { label: string; textClass: string; badgeClass: string }> = {
   STARTER: {
-    label: 'LUMO Starter',
-    bgClass: 'from-slate-900 via-blue-950 to-slate-950 border-blue-500/30',
-    badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
-    accentGlow: 'from-blue-500/20 to-cyan-500/10'
+    label: 'LUMO STARTER',
+    textClass: 'text-blue-400',
+    badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-400/30'
   },
   GREEN: {
-    label: 'LUMO Green',
-    bgClass: 'from-slate-950 via-emerald-950 to-slate-900 border-emerald-500/30',
-    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
-    accentGlow: 'from-emerald-500/20 to-teal-500/10'
+    label: 'LUMO GREEN',
+    textClass: 'text-emerald-400',
+    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
   },
   PRO: {
-    label: 'LUMO Pro',
-    bgClass: 'from-zinc-950 via-emerald-950 to-black border-emerald-400/40 shadow-emerald-900/20',
-    badgeClass: 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border-emerald-400/50',
-    accentGlow: 'from-emerald-400/25 via-emerald-600/15 to-transparent'
+    label: 'LUMO PRO',
+    textClass: 'text-emerald-400',
+    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
   },
   ELITE: {
-    label: 'LUMO Elite',
-    bgClass: 'from-zinc-950 via-slate-900 to-emerald-950 border-cyan-400/40 shadow-cyan-900/20',
-    badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40',
-    accentGlow: 'from-cyan-400/25 to-emerald-500/20'
+    label: 'LUMO ELITE',
+    textClass: 'text-cyan-400',
+    badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30'
   },
   VVIP: {
     label: 'LUMO VVIP',
-    bgClass: 'from-black via-zinc-950 to-amber-950/80 border-amber-400/50 shadow-amber-900/30',
-    badgeClass: 'bg-gradient-to-r from-amber-500/30 to-yellow-400/30 text-amber-200 border-amber-400/60 font-semibold',
-    accentGlow: 'from-amber-400/30 via-yellow-500/20 to-emerald-500/10'
+    textClass: 'text-amber-400',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-400/30'
   }
 };
 
@@ -72,6 +67,7 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
 
   const tierKey = balanceData?.tier || 'PRO';
   const tierStyle = VIP_TIER_STYLES[tierKey] || VIP_TIER_STYLES.PRO;
+  const last4 = balanceData?.accountRef ? balanceData.accountRef.slice(-4) : '2038';
 
   const handleCopyAccountRef = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -83,135 +79,199 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto my-3">
-      {/* CARD CONTAINER */}
-      <div
-        className={`relative overflow-hidden rounded-3xl p-6 sm:p-7 border bg-gradient-to-br ${tierStyle.bgClass} shadow-2xl transition-all duration-300 transform hover:scale-[1.01]`}
-      >
-        {/* Dynamic Background Contours & Emerald Waves */}
-        <div className={`absolute -top-24 -right-24 w-72 h-72 rounded-full bg-gradient-to-br ${tierStyle.accentGlow} blur-3xl pointer-events-none opacity-80`} />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-gradient-to-tr from-emerald-500/10 to-transparent blur-3xl pointer-events-none" />
+    <div className="w-full max-w-[480px] mx-auto my-2 space-y-3">
+      {/* 1. PHYSICAL LUMO MEMBER CARD (Exact Reference Design match) */}
+      <div className="relative w-full aspect-[1.586/1] rounded-2xl p-5 sm:p-6 border border-emerald-500/40 bg-[#070C14] shadow-2xl overflow-hidden flex flex-col justify-between selection:bg-none">
+        
+        {/* Emerald Waves Canvas Overlay */}
+        <div className="absolute inset-0 pointer-events-none opacity-90 overflow-hidden">
+          <svg className="w-full h-full" viewBox="0 0 400 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M180 250 C 220 180, 270 120, 400 70 V 250 H 180 Z"
+              fill="url(#waveGrad1)"
+              opacity="0.85"
+            />
+            <path
+              d="M140 250 C 200 160, 280 80, 400 30 V 250 H 140 Z"
+              fill="url(#waveGrad2)"
+              opacity="0.5"
+            />
+            <path
+              d="M 230 250 C 280 170, 330 110, 400 90"
+              stroke="#10B981"
+              strokeWidth="1.5"
+              opacity="0.6"
+            />
+            <path
+              d="M 180 250 C 240 150, 310 70, 400 20"
+              stroke="#059669"
+              strokeWidth="2"
+              opacity="0.8"
+            />
+            <path
+              d="M 130 250 C 210 130, 290 40, 400 0"
+              stroke="#34D399"
+              strokeWidth="1"
+              opacity="0.4"
+            />
+            <defs>
+              <linearGradient id="waveGrad1" x1="180" y1="70" x2="400" y2="250" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#064E3B" stopOpacity="0.8" />
+                <stop offset="1" stopColor="#022C22" stopOpacity="0.95" />
+              </linearGradient>
+              <linearGradient id="waveGrad2" x1="140" y1="30" x2="400" y2="250" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#059669" stopOpacity="0.4" />
+                <stop offset="1" stopColor="#064E3B" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
 
-        {/* Waves SVG pattern overlay */}
-        <svg
-          className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"
-          viewBox="0 0 400 240"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M-50 120 C 50 180, 150 40, 250 110 C 350 180, 450 60, 500 120 V250 H-50 Z"
-            fill="url(#emeraldWave)"
-          />
-          <defs>
-            <linearGradient id="emeraldWave" x1="0" y1="0" x2="400" y2="240" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#10B981" stopOpacity="0.4" />
-              <stop offset="1" stopColor="#059669" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-        </svg>
+        {/* Ambient Top Glow */}
+        <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
 
-        {/* CARD HEADER ROW */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            {/* Metallic Chip */}
-            <div className="w-11 h-8 rounded-md bg-gradient-to-tr from-amber-300 via-amber-200 to-yellow-400 p-[1px] shadow-sm flex items-center justify-center">
-              <div className="w-full h-full rounded-[4px] border border-amber-600/30 bg-gradient-to-br from-yellow-200/90 to-amber-400/90 flex flex-col justify-between p-1">
-                <div className="w-full h-[1px] bg-amber-700/40" />
-                <div className="w-full h-[1px] bg-amber-700/40" />
-              </div>
-            </div>
-
-            {/* Brand Logo */}
-            <div>
-              <div className="flex items-center space-x-1.5">
-                <span className="font-black tracking-widest text-lg sm:text-xl text-white">LUMO</span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Card
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 tracking-wider uppercase font-medium">Digital Account</p>
+        {/* CARD TOP HEADER: LOGO & LUMO MEMBER */}
+        <div className="relative z-10 flex items-start justify-between">
+          {/* Logo with Green O Accent */}
+          <div className="flex items-center space-x-0.5">
+            <span className="font-extrabold text-2xl sm:text-3xl tracking-tight text-white font-sans">LUM</span>
+            <div className="relative inline-flex items-center justify-center">
+              <span className="font-extrabold text-2xl sm:text-3xl tracking-tight text-white font-sans">O</span>
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Contactless Icon */}
-            <Wifi className="w-5 h-5 text-slate-400 rotate-90 transform" />
-            
-            {/* Tier Badge Trigger */}
-            <button
-              onClick={onOpenVipShowcase}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs border backdrop-blur-md transition-all hover:opacity-90 ${tierStyle.badgeClass}`}
-              title="Click to view VIP Card Tiers"
-            >
-              <Award className="w-3.5 h-3.5 text-amber-300" />
-              <span>{tierStyle.label}</span>
-            </button>
+          {/* LUMO MEMBER Right Label */}
+          <div className="text-right">
+            <span className="text-[11px] sm:text-xs font-semibold tracking-widest text-slate-300 uppercase">
+              LUMO MEMBER
+            </span>
           </div>
         </div>
 
-        {/* ACCOUNT REFERENCE ROW */}
-        <div className="relative z-10 mt-5 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-slate-300 text-xs sm:text-sm font-mono tracking-widest bg-black/40 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10">
-            <span>{balanceData?.accountRef || 'LUMO-••••2038'}</span>
+        {/* CARD MIDDLE: EMV CHIP & CONTACTLESS SYMBOL & CARD NUMBER */}
+        <div className="relative z-10 my-auto pt-1">
+          <div className="flex items-center space-x-3 mb-3">
+            {/* Authentic Silver Metallic EMV Chip */}
+            <div className="w-10 h-7 sm:w-11 sm:h-8 rounded-[5px] bg-gradient-to-tr from-slate-300 via-slate-100 to-slate-400 p-[1px] shadow-inner flex items-center justify-center border border-slate-400/50">
+              <div className="w-full h-full rounded-[3px] bg-gradient-to-br from-slate-200 to-slate-400 border border-slate-500/40 p-0.5 flex flex-col justify-between">
+                <div className="flex justify-between h-[30%]">
+                  <div className="w-[40%] border-r border-b border-slate-600/40" />
+                  <div className="w-[40%] border-l border-b border-slate-600/40" />
+                </div>
+                <div className="w-full h-[1px] bg-slate-600/40" />
+                <div className="flex justify-between h-[30%]">
+                  <div className="w-[40%] border-r border-t border-slate-600/40" />
+                  <div className="w-[40%] border-l border-t border-slate-600/40" />
+                </div>
+              </div>
+            </div>
+
+            {/* Contactless Icon ))) */}
+            <svg className="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <path d="M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" />
+            </svg>
+          </div>
+
+          {/* Masked Card Number */}
+          <div className="flex items-center justify-between">
+            <div className="text-lg sm:text-xl font-mono tracking-[0.2em] font-bold text-white drop-shadow">
+              •••• &nbsp;•••• &nbsp;•••• &nbsp;<span className="text-emerald-400">{last4}</span>
+            </div>
+            
             <button
               onClick={handleCopyAccountRef}
-              className="text-slate-400 hover:text-white transition-colors"
-              title="Copy Account Reference"
+              className="p-1 text-slate-400 hover:text-white transition-colors"
+              title="Copy Card Reference"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
-          </div>
-
-          <div className="text-right">
-            <span className="text-[11px] text-slate-400 block font-medium">Tier Progress</span>
-            <span className="text-xs text-emerald-400 font-semibold">{balanceData?.qualifyingTxCount || 0} Transactions</span>
           </div>
         </div>
 
-        {/* LIVE BALANCE DISPLAY */}
-        <div className="relative z-10 mt-6 pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium flex items-center space-x-1">
-              <span>Available Balance</span>
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 inline" />
-            </span>
+        {/* CARD BOTTOM FOOTER: NAME, PHONE, TIER & BRAND CIRCLES */}
+        <div className="relative z-10 flex items-end justify-between pt-1">
+          {/* Cardholder Name & Phone */}
+          <div>
+            <div className="text-xs sm:text-sm font-bold text-white tracking-wide">
+              {balanceData?.userId ? balanceData.userId.replace('user_', 'User ').replace('_101', '') : 'Ado Myamba'}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-400 font-mono tracking-wider">
+              +255 7XX XXX XXX
+            </div>
+          </div>
 
+          {/* Right Tier Badge & Mastercard Circles */}
+          <div className="flex items-end space-x-3">
+            <button
+              onClick={onOpenVipShowcase}
+              className="text-right group focus:outline-none"
+              title="Click to view VIP Tier Benefits"
+            >
+              <div className={`text-[11px] sm:text-xs font-black tracking-wider uppercase ${tierStyle.textClass} flex items-center justify-end space-x-1`}>
+                <span>{tierStyle.label}</span>
+                <Award className="w-3 h-3 text-emerald-400" />
+              </div>
+              <div className="text-[9px] sm:text-[10px] text-slate-400 font-mono">
+                EXP 05/29
+              </div>
+            </button>
+
+            {/* Red & Orange Overlapping Circles */}
+            <div className="flex items-center -space-x-2 pl-1">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#EB001B] opacity-90 shadow-md" />
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#F79E1B] opacity-90 shadow-md" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. INTEGRATED BALANCE & QUICK ACTION STRIP (Directly below the card) */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Available Balance</span>
             <button
               onClick={() => setShowBalance(!showBalance)}
-              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1 rounded text-slate-400 hover:text-white transition-colors"
             >
-              {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
           </div>
 
-          <div className="mt-1 flex items-baseline space-x-2">
-            <span className="text-sm font-semibold text-slate-400">TZS</span>
-            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              {loading ? (
-                <span className="animate-pulse">••••••</span>
-              ) : showBalance ? (
-                (balanceData?.availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-              ) : (
-                '••••••••'
-              )}
-            </span>
-          </div>
-
-          {/* Reserved balance note if > 0 */}
-          {balanceData && balanceData.reservedBalance > 0 && showBalance && (
-            <div className="mt-1 flex items-center space-x-1.5 text-xs text-amber-400/90 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-              <span>TZS {balanceData.reservedBalance.toLocaleString()} reserved for pending withdrawal/bill</span>
-            </div>
-          )}
+          {/* Tier Tx Counter */}
+          <button
+            onClick={onOpenVipShowcase}
+            className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center space-x-1"
+          >
+            <span>{balanceData?.qualifyingTxCount || 0} Txs</span>
+            <span className="text-slate-500">•</span>
+            <span className="text-amber-400 font-bold">{tierStyle.label}</span>
+          </button>
         </div>
 
-        {/* QUICK ACTION BUTTONS */}
-        <div className="relative z-10 mt-6 pt-4 flex items-center space-x-3">
+        {/* Balance Amount */}
+        <div className="flex items-baseline space-x-2">
+          <span className="text-xs font-bold text-slate-400">TZS</span>
+          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {loading ? (
+              <span className="animate-pulse">••••••</span>
+            ) : showBalance ? (
+              (balanceData?.availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+            ) : (
+              '••••••••'
+            )}
+          </span>
+        </div>
+
+        {/* Action Buttons: Deposit & Withdraw */}
+        <div className="grid grid-cols-2 gap-3 pt-1">
           <button
             onClick={onOpenDeposit}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
+            className="py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Deposit</span>
@@ -219,19 +279,14 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
 
           <button
             onClick={onOpenWithdraw}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm border border-white/15 backdrop-blur-md flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
+            className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
           >
             <ArrowUpRight className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
             <span>Withdraw</span>
           </button>
         </div>
-
-        {/* FINTECH OVERLAPPING CIRCLES SECURITY LOGO */}
-        <div className="absolute bottom-4 right-4 z-10 opacity-70 pointer-events-none flex items-center -space-x-2">
-          <div className="w-7 h-7 rounded-full bg-emerald-500/60 mix-blend-screen blur-[0.3px]" />
-          <div className="w-7 h-7 rounded-full bg-teal-400/60 mix-blend-screen blur-[0.3px]" />
-        </div>
       </div>
     </div>
   );
 };
+
