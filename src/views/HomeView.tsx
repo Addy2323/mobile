@@ -10,6 +10,11 @@ import StatusBadge from '@/components/StatusBadge';
 import ProgressBar from '@/components/ProgressBar';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import RewardsWidget from '@/components/RewardsWidget';
+import { LumoMemberCard } from '@/components/LumoMemberCard';
+import { DepositModal } from '@/components/DepositModal';
+import { WithdrawModal } from '@/components/WithdrawModal';
+import { VipTierShowcase } from '@/components/VipTierShowcase';
+import { fetchUserCardBalance } from '@/lib/ledgerApi';
 
 type HomeViewProps = {
   onSplitClick: (split: Split) => void;
@@ -22,6 +27,25 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
+
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showVipShowcase, setShowVipShowcase] = useState(false);
+  const [cardRefreshTrigger, setCardRefreshTrigger] = useState(0);
+  const [currentBalanceData, setCurrentBalanceData] = useState<any | null>(null);
+
+  const loadBalanceInfo = async () => {
+    try {
+      const data = await fetchUserCardBalance();
+      setCurrentBalanceData(data);
+    } catch (e) {
+      console.warn('Balance load error:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadBalanceInfo();
+  }, [cardRefreshTrigger]);
 
   useEffect(() => {
     async function loadSplits() {
@@ -46,7 +70,45 @@ export default function HomeView({ onSplitClick, onCreate }: HomeViewProps) {
 
   return (
     <div className="min-h-[calc(100vh-78px)] bg-[#f5f6f7] px-4 py-6 sm:px-7 lg:px-10 lg:py-8">
-      <div className="mx-auto max-w-[1190px]">
+      <div className="mx-auto max-w-[1190px] space-y-6">
+        {/* LUMO Member Card */}
+        <LumoMemberCard
+          onOpenDeposit={() => setShowDepositModal(true)}
+          onOpenWithdraw={() => setShowWithdrawModal(true)}
+          onOpenVipShowcase={() => setShowVipShowcase(true)}
+          refreshTrigger={cardRefreshTrigger}
+        />
+
+        {/* Modals */}
+        {showDepositModal && (
+          <DepositModal
+            onClose={() => setShowDepositModal(false)}
+            onSuccess={() => {
+              setShowDepositModal(false);
+              setCardRefreshTrigger(prev => prev + 1);
+            }}
+          />
+        )}
+
+        {showWithdrawModal && (
+          <WithdrawModal
+            availableBalance={currentBalanceData?.availableBalance || 0}
+            onClose={() => setShowWithdrawModal(false)}
+            onSuccess={() => {
+              setShowWithdrawModal(false);
+              setCardRefreshTrigger(prev => prev + 1);
+            }}
+          />
+        )}
+
+        {showVipShowcase && (
+          <VipTierShowcase
+            currentTier={currentBalanceData?.tier || 'STARTER'}
+            txCount={currentBalanceData?.qualifyingTxCount || 0}
+            onClose={() => setShowVipShowcase(false)}
+          />
+        )}
+
         <div className="mb-6 flex items-end justify-between">
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Overview</p>

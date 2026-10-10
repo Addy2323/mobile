@@ -16,7 +16,8 @@ import {
   FileSpreadsheet,
   FileText,
   LogOut,
-  ShieldAlert
+  ShieldAlert,
+  ArrowUpRight
 } from 'lucide-react';
 import { AdminUser } from '../types';
 
@@ -40,6 +41,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'users', label: 'Users', icon: Users, permission: 'users.view', category: 'Operations' },
     { id: 'splits', label: 'Splits', icon: GitFork, permission: 'splits.view', category: 'Operations' },
     { id: 'payments', label: 'Payments', icon: CreditCard, permission: 'payments.view', category: 'Operations' },
+    { id: 'withdrawals', label: 'Withdrawal Approvals', icon: ArrowUpRight, permission: 'payments.view', category: 'Operations' },
     { id: 'settlements', label: 'Settlements', icon: Building2, permission: 'settlements.view', category: 'Operations' },
     { id: 'links', label: 'Payment Links', icon: Link, permission: 'payment_links.view', category: 'Operations' },
     { id: 'destinations', label: 'Destinations', icon: ShieldCheck, permission: 'destinations.view', category: 'Operations' },

@@ -8,7 +8,8 @@ import {
   AdminPaymentsScreen,
   AdminSettlementsScreen,
   AdminPaymentLinksScreen,
-  AdminDestinationsScreen
+  AdminDestinationsScreen,
+  AdminWithdrawalsScreen
 } from './screens/AdminOperationsScreens';
 import {
   AdminPoolsScreen,
@@ -59,6 +60,7 @@ export const AdminApp: React.FC = () => {
       {activeSection === 'users' && <AdminUsersScreen token={token} />}
       {activeSection === 'splits' && <AdminSplitsScreen token={token} />}
       {activeSection === 'payments' && <AdminPaymentsScreen token={token} />}
+      {activeSection === 'withdrawals' && <AdminWithdrawalsScreen token={token} />}
       {activeSection === 'settlements' && <AdminSettlementsScreen token={token} />}
       {activeSection === 'links' && <AdminPaymentLinksScreen token={token} />}
       {activeSection === 'destinations' && <AdminDestinationsScreen token={token} />}

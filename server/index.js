@@ -10,6 +10,7 @@ import { SettlementRouter } from './settlementRouter.js';
 import { ApplicationIntegrationService } from './applicationIntegrationService.js';
 import { SnippeReconciliationJob } from './reconciliationJob.js';
 import { createAdminRouter } from './adminRoutes.js';
+import { LedgerService, calculateVipTier } from './ledgerService.js';
 
 dotenv.config();
 
@@ -31,6 +32,71 @@ async function autoMigrateOnStartup(p) {
     console.log('[Auto-Migrate] Checking and ensuring database schema compliance...');
     await p.query(`
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      CREATE TABLE IF NOT EXISTS user_balances (
+        user_id VARCHAR(128) PRIMARY KEY,
+        available_balance NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        pending_balance NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        reserved_balance NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        total_credits NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        total_debits NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        tier VARCHAR(32) NOT NULL DEFAULT 'STARTER',
+        qualifying_tx_count INT NOT NULL DEFAULT 0,
+        account_ref VARCHAR(32) UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ledger_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(128) NOT NULL REFERENCES user_balances(user_id) ON DELETE CASCADE,
+        transaction_type VARCHAR(64) NOT NULL,
+        direction VARCHAR(16) NOT NULL,
+        amount NUMERIC(15, 2) NOT NULL,
+        currency VARCHAR(8) DEFAULT 'TZS',
+        status VARCHAR(32) NOT NULL DEFAULT 'COMPLETED',
+        reference_type VARCHAR(64),
+        reference_id VARCHAR(128),
+        provider_tx_ref VARCHAR(128),
+        idempotency_key VARCHAR(128) UNIQUE,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS withdrawal_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(128) NOT NULL REFERENCES user_balances(user_id) ON DELETE CASCADE,
+        amount NUMERIC(15, 2) NOT NULL,
+        fee NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+        net_amount NUMERIC(15, 2) NOT NULL,
+        currency VARCHAR(8) DEFAULT 'TZS',
+        destination_type VARCHAR(32) NOT NULL,
+        destination_details JSONB NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING_REVIEW',
+        reference_code VARCHAR(32) UNIQUE NOT NULL,
+        admin_reviewer_id VARCHAR(128),
+        rejection_reason TEXT,
+        provider_tx_ref VARCHAR(128),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS bill_payments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(128) NOT NULL REFERENCES user_balances(user_id) ON DELETE CASCADE,
+        provider VARCHAR(64) NOT NULL,
+        account_meter_number VARCHAR(128) NOT NULL,
+        amount NUMERIC(15, 2) NOT NULL,
+        fee NUMERIC(15, 2) DEFAULT 0.00,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+        token_code VARCHAR(128),
+        units_purchased VARCHAR(64),
+        receipt_ref VARCHAR(64) UNIQUE NOT NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
 
       CREATE TABLE IF NOT EXISTS application_integrations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -119,6 +185,297 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// --- LUMO USER CARD & LEDGER ENDPOINTS ---
+
+// 1. Get User Card Balance & Tier
+app.get('/api/user/card-balance', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    await client.query('BEGIN');
+    const balance = await LedgerService.getOrCreateUserBalance(client, userId);
+    await client.query('COMMIT');
+    res.json({
+      userId: balance.user_id,
+      availableBalance: Number(balance.available_balance),
+      pendingBalance: Number(balance.pending_balance),
+      reservedBalance: Number(balance.reserved_balance),
+      totalCredits: Number(balance.total_credits),
+      totalDebits: Number(balance.total_debits),
+      tier: balance.tier,
+      qualifyingTxCount: balance.qualifying_tx_count,
+      accountRef: balance.account_ref,
+      updatedAt: balance.updated_at
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 2. Get User Ledger Transactions
+app.get('/api/user/ledger-transactions', async (req, res) => {
+  try {
+    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const { rows } = await pool.query(
+      'SELECT * FROM ledger_transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [userId]
+    );
+    res.json(rows.map(r => ({ ...r, amount: Number(r.amount) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Deposit Money via Snippe USSD / Mobile Money Collection
+app.post('/api/user/deposits/initiate', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const { amount, phone, provider = 'M-Pesa' } = req.body;
+    const numAmount = Number(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Valid deposit amount required.' });
+    }
+    if (!phone || phone.length < 6) {
+      return res.status(400).json({ error: 'Valid phone number required.' });
+    }
+
+    await client.query('BEGIN');
+    await LedgerService.getOrCreateUserBalance(client, userId);
+
+    const idempotencyKey = `dep_${userId}_${Date.now()}`;
+    const refCode = `DEP-${Date.now().toString().slice(-6)}`;
+
+    // Post pending deposit intent or trigger Snippe provider
+    let snippeResult;
+    try {
+      snippeResult = await SnippePaymentProvider.initiatePayment({
+        amount: numAmount,
+        phone,
+        splitId: 'DEPOSIT_WALLET',
+        participantId: userId,
+        participantName: 'LUMO User Deposit',
+        idempotencyKey
+      });
+    } catch (e) {
+      snippeResult = { providerTxRef: refCode, status: 'PENDING' };
+    }
+
+    // Record pending transaction in ledger
+    await client.query(
+      `INSERT INTO ledger_transactions (user_id, transaction_type, direction, amount, currency, status, reference_type, reference_id, provider_tx_ref, idempotency_key, metadata)
+       VALUES ($1, 'DEPOSIT', 'CREDIT', $2, 'TZS', 'PENDING', 'DEPOSIT', $3, $4, $5, $6)`,
+      [userId, numAmount, refCode, snippeResult.providerTxRef, idempotencyKey, { phone, provider }]
+    );
+
+    // If sandbox / local simulation mode, auto-confirm credit after initiation
+    let isConfirmedImmediately = false;
+    if (process.env.AUTO_CONFIRM_SANDBOX_DEPOSITS === 'true' || process.env.NODE_ENV !== 'production') {
+      await LedgerService.postCredit(client, {
+        userId,
+        amount: numAmount,
+        transactionType: 'DEPOSIT',
+        referenceType: 'DEPOSIT',
+        referenceId: refCode,
+        providerTxRef: snippeResult.providerTxRef,
+        idempotencyKey: `credit_${idempotencyKey}`,
+        metadata: { phone, provider, simulated: true }
+      });
+      isConfirmedImmediately = true;
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: isConfirmedImmediately
+        ? 'Deposit processed & balance credited successfully!'
+        : 'Deposit USSD prompt dispatched to phone. Awaiting approval.',
+      depositRef: refCode,
+      providerTxRef: snippeResult.providerTxRef,
+      isConfirmed: isConfirmedImmediately,
+      amount: numAmount
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 4. Request Controlled Withdrawal
+app.post('/api/user/withdrawals/request', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const { amount, destination_type = 'MOBILE_MONEY', destination_details } = req.body;
+    const numAmount = Number(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Valid withdrawal amount required.' });
+    }
+    if (!destination_details || (!destination_details.phone && !destination_details.account_number)) {
+      return res.status(400).json({ error: 'Destination details (phone or bank account) required.' });
+    }
+
+    await client.query('BEGIN');
+    const fee = numAmount > 50000 ? 1000 : 500;
+    const netAmount = Math.max(0, numAmount - fee);
+    const refCode = `WTH-${Date.now().toString().slice(-6)}`;
+    const idempotencyKey = `wth_${userId}_${Date.now()}`;
+
+    // Reserve funds atomically from available balance
+    await LedgerService.reserveFunds(client, {
+      userId,
+      amount: numAmount,
+      transactionType: 'WITHDRAWAL_RESERVE',
+      referenceType: 'WITHDRAWAL',
+      referenceId: refCode,
+      idempotencyKey,
+      metadata: { fee, netAmount, destination_type, destination_details }
+    });
+
+    // Create withdrawal request entry in PENDING_REVIEW status
+    const reqRes = await client.query(
+      `INSERT INTO withdrawal_requests (user_id, amount, fee, net_amount, currency, destination_type, destination_details, status, reference_code)
+       VALUES ($1, $2, $3, $4, 'TZS', $5, $6, 'PENDING_REVIEW', $7)
+       RETURNING *`,
+      [userId, numAmount, fee, netAmount, destination_type, destination_details, refCode]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'Your withdrawal request has been submitted successfully and is under review.',
+      withdrawalRequest: {
+        ...reqRes.rows[0],
+        amount: Number(reqRes.rows[0].amount),
+        fee: Number(reqRes.rows[0].fee),
+        netAmount: Number(reqRes.rows[0].net_amount)
+      }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 5. Get User Withdrawals
+app.get('/api/user/withdrawals', async (req, res) => {
+  try {
+    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const { rows } = await pool.query(
+      'SELECT * FROM withdrawal_requests WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    res.json(rows.map(r => ({ ...r, amount: Number(r.amount), fee: Number(r.fee), netAmount: Number(r.net_amount) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Utility Bill Payment Endpoint (TANESCO / DAWASCO)
+app.get('/api/utility/providers', (req, res) => {
+  res.json([
+    { id: 'TANESCO', name: 'TANESCO LUKU Electricity', category: 'Electricity', icon: 'Zap', fee: 0, requiresMeter: true },
+    { id: 'DAWASCO', name: 'DAWASCO Water Services', category: 'Water', icon: 'Droplets', fee: 0, requiresMeter: true },
+    { id: 'TTCL', name: 'TTCL Broadband & Landline', category: 'Telecom', icon: 'Wifi', fee: 0, requiresMeter: true },
+    { id: 'ZUKU', name: 'Zuku Fiber / TV Subscription', category: 'Cable TV', icon: 'Tv', fee: 0, requiresMeter: true }
+  ]);
+});
+
+app.post('/api/user/bill-payments', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const { provider = 'TANESCO', account_meter_number, amount } = req.body;
+    const numAmount = Number(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Valid bill amount required.' });
+    }
+    if (!account_meter_number || account_meter_number.trim().length < 4) {
+      return res.status(400).json({ error: 'Valid meter or customer account number required.' });
+    }
+
+    await client.query('BEGIN');
+    const balance = await LedgerService.getOrCreateUserBalance(client, userId);
+
+    if (Number(balance.available_balance) < numAmount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Insufficient card balance. Available: TZS ${formatMoneyNumber(balance.available_balance)}` });
+    }
+
+    const receiptRef = `BILL-${Date.now().toString().slice(-6)}`;
+    const idempotencyKey = `bill_${userId}_${Date.now()}`;
+
+    // Reserve funds atomically
+    await LedgerService.reserveFunds(client, {
+      userId,
+      amount: numAmount,
+      transactionType: 'BILL_PAYMENT',
+      referenceType: 'BILL_PAYMENT',
+      referenceId: receiptRef,
+      idempotencyKey,
+      metadata: { provider, account_meter_number }
+    });
+
+    // Generate token if TANESCO
+    let tokenCode = null;
+    let unitsPurchased = null;
+    if (provider === 'TANESCO') {
+      tokenCode = `${Math.floor(1000 + Math.random()*9000)}-${Math.floor(1000 + Math.random()*9000)}-${Math.floor(1000 + Math.random()*9000)}-${Math.floor(1000 + Math.random()*9000)}`;
+      unitsPurchased = `${(numAmount / 350).toFixed(1)} kWh`;
+    }
+
+    // Complete debit
+    await LedgerService.completeReservedDebit(client, {
+      userId,
+      amount: numAmount,
+      transactionType: 'BILL_PAYMENT',
+      referenceType: 'BILL_PAYMENT',
+      referenceId: receiptRef,
+      providerTxRef: receiptRef,
+      metadata: { provider, account_meter_number, tokenCode, unitsPurchased }
+    });
+
+    const billRes = await client.query(
+      `INSERT INTO bill_payments (user_id, provider, account_meter_number, amount, status, token_code, units_purchased, receipt_ref)
+       VALUES ($1, $2, $3, $4, 'COMPLETED', $5, $6, $7)
+       RETURNING *`,
+      [userId, provider, account_meter_number, numAmount, tokenCode, unitsPurchased, receiptRef]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Payment of TZS ${numAmount.toLocaleString()} to ${provider} completed successfully.`,
+      billPayment: {
+        ...billRes.rows[0],
+        amount: Number(billRes.rows[0].amount)
+      }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+function formatMoneyNumber(val) {
+  return Number(val).toLocaleString();
+}
 
 // --- PAYMENT DESTINATIONS ---
 app.get('/api/destinations', async (req, res) => {

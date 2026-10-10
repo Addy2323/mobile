@@ -18,6 +18,11 @@ import StatusBadge from '@/components/StatusBadge';
 import ProgressBar from '@/components/ProgressBar';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { CardSkeleton } from '../components/SkeletonLoader';
+import { LumoMemberCard } from '@/components/LumoMemberCard';
+import { DepositModal } from '@/components/DepositModal';
+import { WithdrawModal } from '@/components/WithdrawModal';
+import { VipTierShowcase } from '@/components/VipTierShowcase';
+import { fetchUserCardBalance } from '@/lib/ledgerApi';
 
 export interface HomeScreenProps {
   language: Language;
@@ -36,7 +41,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showVipShowcase, setShowVipShowcase] = useState(false);
+  const [cardRefreshTrigger, setCardRefreshTrigger] = useState(0);
+  const [currentBalanceData, setCurrentBalanceData] = useState<any | null>(null);
+
   const t = (key: any) => getTranslation(key, language);
+
+  const loadBalanceInfo = async () => {
+    try {
+      const data = await fetchUserCardBalance();
+      setCurrentBalanceData(data);
+    } catch (e) {
+      console.warn('Balance load error:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadBalanceInfo();
+  }, [cardRefreshTrigger]);
 
   async function fetchSplits() {
     try {
@@ -68,6 +92,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="p-4 space-y-5 no-tap-highlight">
+      {/* LUMO Member Card Component */}
+      <LumoMemberCard
+        onOpenDeposit={() => setShowDepositModal(true)}
+        onOpenWithdraw={() => setShowWithdrawModal(true)}
+        onOpenVipShowcase={() => setShowVipShowcase(true)}
+        refreshTrigger={cardRefreshTrigger}
+      />
+
+      {/* Modals */}
+      {showDepositModal && (
+        <DepositModal
+          onClose={() => setShowDepositModal(false)}
+          onSuccess={() => {
+            setShowDepositModal(false);
+            setCardRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showWithdrawModal && (
+        <WithdrawModal
+          availableBalance={currentBalanceData?.availableBalance || 0}
+          onClose={() => setShowWithdrawModal(false)}
+          onSuccess={() => {
+            setShowWithdrawModal(false);
+            setCardRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showVipShowcase && (
+        <VipTierShowcase
+          currentTier={currentBalanceData?.tier || 'STARTER'}
+          txCount={currentBalanceData?.qualifyingTxCount || 0}
+          onClose={() => setShowVipShowcase(false)}
+        />
+      )}
+
       {/* Premium Hero Card with Restaurant Background & Navy Gradient */}
       <div className="relative rounded-3xl overflow-hidden shadow-xl border border-slate-800/40 text-white min-h-[190px] flex flex-col justify-between p-6">
         {/* Background Image */}

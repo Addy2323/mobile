@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowLeft, Banknote, Building2, Check, CheckCircle2, Clock,
-  Copy, CreditCard, Landmark, Loader2, Lock, MessageCircle, Phone,
+  Copy, CreditCard, Download, Landmark, Loader2, Lock, MessageCircle, Phone,
   ShieldCheck, Smartphone, Timer, X, XCircle,
 } from 'lucide-react';
 import { supabase, type Split, type Participant, type Merchant } from '@/lib/supabase';
 import { formatMoney, formatDateTime } from '@/lib/utils';
+import { downloadColoredReceipt } from '@/lib/coloredReceipt';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import TrustStrip from '@/components/TrustStrip';
 import StatusBadge from '@/components/StatusBadge';
@@ -37,6 +38,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [claimSent, setClaimSent] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [lastPaidAmount, setLastPaidAmount] = useState<number | null>(null);
 
   useEffect(() => {
     void loadData();
@@ -197,6 +199,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
 
     setError('');
     setStage('processing');
+    setLastPaidAmount(payAmountNum);
     startCountdown();
 
     const idempotencyKey = generateIdempotencyKey();
@@ -305,7 +308,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   if (stage === 'success' && split && participant) {
     return <Shell><div className="mx-auto max-w-md px-4 py-8 animate-slide-up">
       <div className="mb-6 text-center"><div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-success-400 to-success-600 shadow-lg shadow-success-500/30 animate-scale-in"><CheckCircle2 className="h-10 w-10 text-white" strokeWidth={2.5} /></div><h1 className="text-2xl font-extrabold text-slate-900">Payment Confirmed</h1><p className="mt-2 text-sm text-slate-500">Your contribution has been recorded and the organizer notified.</p></div>
-      <Receipt split={split} participant={participant} merchant={merchant} txRef={txRef} providerLabel={paymentProviders[provider].label} amount={payAmountNum} />
+      <Receipt split={split} participant={participant} merchant={merchant} txRef={txRef} providerLabel={paymentProviders[provider].label} amount={lastPaidAmount || participant.amount_paid || participant.allocation_amount} />
       {participant.allocation_amount - participant.amount_paid > 0 && <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">Remaining balance: {formatMoney(participant.allocation_amount - participant.amount_paid)}. You can pay the rest later.</div>}
       <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-4 text-center"><p className="text-sm font-bold text-primary-900">Create your LUMO account</p><p className="mt-1 text-xs text-primary-700">Track all your splits, get reminders, and pay faster next time.</p><button className="mt-3 rounded-lg bg-primary-600 px-4 py-2 text-xs font-bold text-white">Sign up free</button></div>
     </div></Shell>;
@@ -448,7 +451,10 @@ function Receipt({ split, participant, merchant, txRef, providerLabel, amount }:
     <Row label="Bill" value={split.title} />
     <Row label="Status" value="Confirmed" />
     <div className="mt-4"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
-    <button onClick={() => { void navigator.clipboard?.writeText(txRef); setCopied(true); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-xs font-bold text-slate-600">{copied ? <Check className="h-4 w-4 text-success-600" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy transaction ID'}</button>
+    <div className="mt-4 flex gap-2">
+      <button onClick={() => downloadColoredReceipt({ title: split.title, refCode: split.ref_code, txRef, amount, participantName: participant.name, merchantName: merchant?.display_name || undefined, providerLabel })} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-xs font-bold text-white shadow-md shadow-primary-500/20 hover:bg-primary-700 transition-all"><Download className="h-4 w-4" /> Download Receipt</button>
+      <button onClick={() => { void navigator.clipboard?.writeText(txRef); setCopied(true); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">{copied ? <Check className="h-4 w-4 text-success-600" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy Ref'}</button>
+    </div>
   </div>;
 }
 

@@ -12,6 +12,7 @@ import ProgressBar from '@/components/ProgressBar';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import Modal from '@/components/Modal';
 import TrustStrip from '@/components/TrustStrip';
+import { downloadColoredReceipt } from '@/lib/coloredReceipt';
 
 type SplitDetailViewProps = {
   split: Split;
@@ -198,28 +199,20 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
   }
 
   function handleDownloadReceipt() {
-    const lines = [
-      `LUMO Split Receipt`,
-      `-------------------`,
-      `Bill: ${split.title}`,
-      `Ref: ${split.ref_code}`,
-      `Destination: ${merchant?.display_name || 'Manual'}`,
-      `Total: ${formatMoney(split.total_amount)}`,
-      `Collected: ${formatMoney(split.amount_paid)}`,
-      `Status: ${split.status}`,
-      `Date: ${formatDateTime(new Date().toISOString())}`,
-      ``,
-      `Participants:`,
-      ...participants.map((p) => `  ${p.name} — ${formatMoney(p.allocation_amount)} — ${p.status}${p.payment_ref ? ` (Ref: ${p.payment_ref})` : ''}`),
-      ``,
-      `Payments:`,
-      ...payments.map((pay) => `  ${pay.provider_tx_ref || 'N/A'} — ${formatMoney(pay.amount)} — ${pay.status}`),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `lumo-receipt-${split.ref_code}.txt`; a.click();
-    URL.revokeObjectURL(url);
+    downloadColoredReceipt({
+      title: split.title,
+      refCode: split.ref_code,
+      amount: split.amount_paid,
+      totalAmount: split.total_amount,
+      merchantName: merchant?.display_name || undefined,
+      status: split.status,
+      participants: participants.map((p) => ({
+        name: p.name,
+        amount: p.allocation_amount,
+        status: p.status,
+        payment_ref: p.payment_ref,
+      })),
+    });
   }
 
   function handleSendThankYou(message: string) {
@@ -231,9 +224,13 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
     showToast('Thank-you sent to all participants');
   }
 
-  const remaining = split.total_amount - split.amount_paid;
-  const paidParticipants = participants.filter((p) => p.status === 'PAID');
-  const pendingParticipants = participants.filter((p) => p.status !== 'PAID' && !p.is_organizer);
+  const isParticipantPaid = (p: Participant) => {
+    const st = (p.status || '').toUpperCase();
+    return st === 'PAID' || st === 'SETTLED' || st === 'CASH' || Boolean(p.is_paid) || (Number(p.amount_paid || 0) >= Number(p.allocation_amount || 0) && Number(p.allocation_amount || 0) > 0);
+  };
+  const remaining = Math.max(0, split.total_amount - split.amount_paid);
+  const paidParticipants = participants.filter(isParticipantPaid);
+  const pendingParticipants = participants.filter((p) => !isParticipantPaid(p) && !p.is_organizer);
   const isSettled = split.status === 'SETTLED' || split.settlement_percent === 100;
   const isCancelled = split.status === 'CANCELLED';
 

@@ -395,3 +395,112 @@ export const AdminDestinationsScreen: React.FC<OpsProps> = ({ token }) => {
     </div>
   );
 };
+
+// -------------------------------------------------------------
+// WITHDRAWALS APPROVAL QUEUE SCREEN
+// -------------------------------------------------------------
+export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchWithdrawals = async () => {
+    setLoading(true);
+    const res = await fetch('/api/admin/withdrawals', { headers: getHeaders(token) });
+    if (res.ok) setWithdrawals(await res.json());
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchWithdrawals(); }, [token]);
+
+  const handleAction = async (withdrawalId: string, action: 'APPROVE' | 'REJECT') => {
+    const reason = action === 'REJECT' ? prompt('Reason for rejection:') : null;
+    if (action === 'REJECT' && reason === null) return;
+
+    const res = await fetch(`/api/admin/withdrawals/${withdrawalId}/action`, {
+      method: 'POST',
+      headers: { ...getHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, reason })
+    });
+
+    if (res.ok) {
+      alert(`Withdrawal request ${action}D successfully!`);
+      fetchWithdrawals();
+    } else {
+      const err = await res.json();
+      alert(err.error || 'Action failed');
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-base font-extrabold text-white">Controlled Withdrawal Approvals & Ledger Payouts</h2>
+      <div className="bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden">
+        <table className="w-full text-left text-xs text-slate-300">
+          <thead className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider text-[10px]">
+            <tr>
+              <th className="p-4">Ref Code</th>
+              <th className="p-4">User ID</th>
+              <th className="p-4">Destination</th>
+              <th className="p-4">Gross Amount</th>
+              <th className="p-4">Fee / Net</th>
+              <th className="p-4">Status</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/60">
+            {loading ? (
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Loading withdrawal queue...</td></tr>
+            ) : withdrawals.length === 0 ? (
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500">No withdrawal requests found</td></tr>
+            ) : (
+              withdrawals.map((w) => (
+                <tr key={w.id} className="hover:bg-slate-900/40">
+                  <td className="p-4 font-mono text-amber-400 font-bold">{w.reference_code}</td>
+                  <td className="p-4 font-mono text-slate-400 text-[11px]">{w.user_id}</td>
+                  <td className="p-4">
+                    <div className="font-semibold text-white">{w.destination_type}</div>
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      {w.destination_details?.phone || `${w.destination_details?.bank_name} (${w.destination_details?.account_number})`}
+                    </div>
+                  </td>
+                  <td className="p-4 font-mono font-bold text-white">TZS {Number(w.amount).toLocaleString()}</td>
+                  <td className="p-4 font-mono text-emerald-400 text-[11px]">
+                    Net: TZS {Number(w.net_amount || w.amount - (w.fee || 0)).toLocaleString()}
+                    <span className="block text-slate-500 text-[10px]">Fee: TZS {Number(w.fee || 0).toLocaleString()}</span>
+                  </td>
+                  <td className="p-4">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      w.status === 'COMPLETED' || w.status === 'APPROVED' ? 'bg-emerald-950 text-emerald-400' :
+                      w.status === 'PENDING_REVIEW' ? 'bg-amber-950 text-amber-400 border border-amber-800/60' : 'bg-rose-950 text-rose-400'
+                    }`}>
+                      {w.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right space-x-2">
+                    {w.status === 'PENDING_REVIEW' && (
+                      <>
+                        <button
+                          onClick={() => handleAction(w.id, 'APPROVE')}
+                          className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 rounded-lg text-[10px] font-bold"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleAction(w.id, 'REJECT')}
+                          className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-[10px] font-bold"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+

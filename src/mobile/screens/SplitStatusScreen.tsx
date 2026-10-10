@@ -44,11 +44,21 @@ export const SplitStatusScreen: React.FC<SplitStatusScreenProps> = ({ split, onB
     loadParticipants();
   }, [split.id]);
 
-  const paidParticipants = participants.filter((p) => p.status === 'Paid');
-  const pendingParticipants = participants.filter((p) => p.status !== 'Paid');
-  const collectedAmount = participants.reduce((sum, p) => sum + (p.status === 'Paid' ? p.allocation_amount : 0), 0);
-  const remainingAmount = split.total_amount - collectedAmount;
-  const pct = Math.round((collectedAmount / (split.total_amount || 1)) * 100);
+  const isParticipantPaid = (p: Participant) => {
+    const st = (p.status || '').toUpperCase();
+    return st === 'PAID' || st === 'SETTLED' || st === 'CASH' || Boolean(p.is_paid) || (Number(p.amount_paid || 0) >= Number(p.allocation_amount || 0) && Number(p.allocation_amount || 0) > 0);
+  };
+
+  const getPaidAmount = (p: Participant) => {
+    if (!isParticipantPaid(p)) return Number(p.amount_paid || 0);
+    return Number(p.amount_paid || 0) > 0 ? Number(p.amount_paid) : Number(p.allocation_amount || 0);
+  };
+
+  const paidParticipants = participants.filter(isParticipantPaid);
+  const pendingParticipants = participants.filter((p) => !isParticipantPaid(p));
+  const collectedAmount = participants.reduce((sum, p) => sum + getPaidAmount(p), 0);
+  const remainingAmount = Math.max(0, split.total_amount - collectedAmount);
+  const pct = Math.min(100, Math.round((collectedAmount / (split.total_amount || 1)) * 100));
 
   const handleMarkCash = async (p: Participant) => {
     try {

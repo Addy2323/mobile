@@ -46,6 +46,7 @@ export type Participant = {
   paid_at: string | null;
   payment_ref: string | null;
   is_organizer: boolean;
+  is_paid?: boolean;
   claim_status?: string;
   created_at: string;
 };
