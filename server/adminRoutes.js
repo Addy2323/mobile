@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { createAdminAuthMiddleware, requirePermission, logAdminAuditAction, hashPassword } from './adminAuth.js';
 import { ApplicationIntegrationService } from './applicationIntegrationService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.ADMIN_KEY || 'lumo_ops_jwt_secure_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export function createAdminRouter(pool) {
   const router = express.Router();
