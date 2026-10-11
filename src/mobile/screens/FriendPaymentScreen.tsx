@@ -40,6 +40,8 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   const [data, setData] = useState<PublicPaymentData | null>(null);
 
   const [provider, setProvider] = useState<'mobile' | 'bank' | 'card'>('mobile');
+  const [payerName, setPayerName] = useState('');
+  const [customAmount, setCustomAmount] = useState('');
   const [phone, setPhone] = useState('');
   const [countdown, setCountdown] = useState(45);
   const [txRef, setTxRef] = useState('');
@@ -61,6 +63,9 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
       const linkData: PublicPaymentData = await res.json();
       setData(linkData);
+      if (linkData.amount) {
+        setCustomAmount(String(linkData.amount));
+      }
       setStep('method');
     } catch (err: any) {
       setErrorMessage('Unable to load payment link details. Please check your network connection.');
@@ -87,6 +92,10 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
   const handleStartPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!phone) {
+      alert('Please enter your mobile phone number.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -95,12 +104,15 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone,
+          name: payerName.trim(),
+          payer_name: payerName.trim(),
+          amount: customAmount ? Number(customAmount) : (data?.amount || 0),
           payment_method: provider === 'mobile' ? 'Mobile Money' : provider === 'bank' ? 'Bank' : 'Card',
         }),
       });
 
       if (!res.ok) {
-        const errJson = await res.json();
+        const errJson = await res.json().catch(() => ({}));
         alert(`Payment error: ${errJson.error || 'Payment failed'}`);
         setLoading(false);
         return;
@@ -294,28 +306,55 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
             </div>
           )}
 
-          {/* STEP 2: Phone Input */}
+          {/* STEP 2: Phone & Contributor Input */}
           {step === 'phone' && (
             <form onSubmit={handleStartPayment} className="flex-1 flex flex-col justify-between py-4 space-y-4">
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">Enter Payment Phone Number</h3>
+                  <h3 className="text-lg font-extrabold text-slate-900">Contributor Details</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    We will send an instant USSD authorization prompt to this number.
+                    Enter your name and mobile number to authorize the instant payment.
                   </p>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-600 mb-1 block">Phone Number</label>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="0754 123 456"
-                    className="w-full px-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-lg text-slate-900"
-                    autoFocus
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 mb-1 block">Your Full Name</label>
+                    <input
+                      type="text"
+                      value={payerName}
+                      onChange={(e) => setPayerName(e.target.value)}
+                      placeholder="e.g. Kelvin John Mushi"
+                      required
+                      className="w-full px-4 py-3 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-sm text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 mb-1 block">Phone Number (M-Pesa / Tigo Pesa / Airtel)</label>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0754 123 456"
+                      required
+                      className="w-full px-4 py-3 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-lg text-slate-900 font-mono"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 mb-1 block">Amount to Pay (TZS)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={customAmount || data.amount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 bg-slate-100 rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-black text-lg text-slate-900"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -324,7 +363,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                 disabled={loading}
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
               >
-                {loading ? 'Processing...' : 'Confirm & Authorize'}
+                {loading ? 'Processing...' : `Confirm & Pay ${formatMoney(Number(customAmount || data.amount))}`}
               </button>
             </form>
           )}

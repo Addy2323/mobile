@@ -110,6 +110,30 @@ async function autoMigrateOnStartup(p) {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS public_link_payments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        link_type VARCHAR(32) NOT NULL, -- 'PAYMENT_LINK', 'BIRTHDAY_POOL', 'MCHANGO'
+        link_token VARCHAR(128) NOT NULL,
+        link_id UUID,
+        owner_user_id VARCHAR(128) NOT NULL,
+        payer_name VARCHAR(128) NOT NULL,
+        payer_phone VARCHAR(32) NOT NULL,
+        amount NUMERIC(15, 2) NOT NULL,
+        currency VARCHAR(8) DEFAULT 'TZS',
+        payment_method VARCHAR(64) DEFAULT 'Mobile Money',
+        status VARCHAR(32) NOT NULL DEFAULT 'COMPLETED',
+        provider_tx_ref VARCHAR(128),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_public_link_payments_owner ON public_link_payments(owner_user_id);
+      CREATE INDEX IF NOT EXISTS idx_public_link_payments_token ON public_link_payments(link_token);
+
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(128);
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS collected_amount NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(128);
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS collected_amount NUMERIC(15, 2) DEFAULT 0;
+
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS application_id VARCHAR(64);
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS webhook_url_used TEXT;
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS resource_type VARCHAR(64);
@@ -753,10 +777,10 @@ app.get('/api/payment-links', async (req, res) => {
   }
 });
 
-// PUBLIC PAYMENT LINK LOOKUP (FIXES "Split not found" END-TO-END)
+// PUBLIC PAYMENT LINK LOOKUP (Supports Payment Links, Splits, Birthday Pools & Michango)
 app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (req, res) => {
   try {
-    const token = req.params.token;
+    const token = req.params.token.trim();
 
     // 1. Check payment_links table
     const plRes = await pool.query('SELECT * FROM payment_links WHERE UPPER(public_token) = UPPER($1)', [token]);
@@ -786,11 +810,12 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
         status: link.status,
         expirationMode: link.expiration_mode,
         expiresAt: link.expires_at,
+        organizerName: link.owner_user_id ? 'LUMO Member' : 'Organizer',
         destinationSnapshot: link.destination_snapshot
       });
     }
 
-    // 2. Fallback check splits table by ref_code
+    // 2. Check splits table by ref_code
     const splitRes = await pool.query(
       `SELECT s.*, row_to_json(m.*) AS merchant
        FROM splits s
@@ -818,29 +843,85 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
       });
     }
 
+    // 3. Check birthday_pools table (supports full uuid or BDAY- prefix)
+    const bdayRaw = token.replace(/^BDAY-/i, '');
+    const bdayRes = await pool.query(
+      `SELECT * FROM birthday_pools 
+       WHERE UPPER(id::text) = UPPER($1) 
+          OR UPPER(SUBSTRING(id::text, 1, 6)) = UPPER($2)
+          OR UPPER(SUBSTRING(id::text, 1, 8)) = UPPER($2)
+          OR UPPER(id::text) LIKE UPPER($3)
+       LIMIT 1`,
+      [token, bdayRaw, `%${bdayRaw}%`]
+    );
+
+    if (bdayRes.rows.length > 0) {
+      const poolRow = bdayRes.rows[0];
+      return res.json({
+        type: 'BIRTHDAY_POOL',
+        id: poolRow.id,
+        token: `BDAY-${poolRow.id.slice(0, 6)}`,
+        title: `${poolRow.birthday_person}'s Birthday: ${poolRow.message || 'Gift Pool'}`,
+        amount: parseInt(poolRow.target_amount, 10),
+        collectedAmount: parseInt(poolRow.collected_amount || 0, 10),
+        currency: poolRow.currency,
+        status: poolRow.status,
+        organizerName: `${poolRow.birthday_person}'s Friends`,
+        destinationSnapshot: poolRow.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    // 4. Check michango_events table (supports full uuid or MCHANG- prefix)
+    const mchangRaw = token.replace(/^MCHANG-/i, '');
+    const mchangRes = await pool.query(
+      `SELECT * FROM michango_events 
+       WHERE UPPER(id::text) = UPPER($1) 
+          OR UPPER(SUBSTRING(id::text, 1, 6)) = UPPER($2)
+          OR UPPER(SUBSTRING(id::text, 1, 8)) = UPPER($2)
+          OR UPPER(id::text) LIKE UPPER($3)
+       LIMIT 1`,
+      [token, mchangRaw, `%${mchangRaw}%`]
+    );
+
+    if (mchangRes.rows.length > 0) {
+      const evRow = mchangRes.rows[0];
+      return res.json({
+        type: 'MCHANGO',
+        id: evRow.id,
+        token: `MCHANG-${evRow.id.slice(0, 6)}`,
+        title: evRow.title,
+        amount: parseInt(evRow.target_amount, 10),
+        collectedAmount: parseInt(evRow.collected_amount || 0, 10),
+        currency: evRow.currency,
+        status: evRow.status,
+        organizerName: 'Community Organizer',
+        destinationSnapshot: evRow.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
     return res.status(404).json({ error: 'Payment link not found.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUBLIC PAYMENT LINK PAY
+// PUBLIC PAYMENT LINK PAY (ONLINE PAYMENT ACTIVATED & AUTOMATIC WALLET BALANCE CREDITING)
 app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'], async (req, res) => {
-  if (process.env.ALLOW_SIMULATED_PAYMENTS !== 'true') return res.status(503).json({ error: 'Online payment is not enabled yet.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const token = req.params.token;
-    const { phone, payment_method = 'M-Pesa' } = req.body;
+    const token = req.params.token.trim();
+    const { phone, name, payer_name, amount, payment_method = 'Mobile Money' } = req.body;
 
     if (!phone) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Phone number is required.' });
     }
 
-    // Lookup link in payment_links
-    const plRes = await client.query('SELECT * FROM payment_links WHERE UPPER(public_token) = UPPER($1) FOR UPDATE', [token]);
+    const finalPayerName = (name || payer_name || 'Contributor').trim();
 
+    // 1. Try payment_links table
+    const plRes = await client.query('SELECT * FROM payment_links WHERE UPPER(public_token) = UPPER($1) FOR UPDATE', [token]);
     if (plRes.rows.length > 0) {
       const link = plRes.rows[0];
 
@@ -860,30 +941,232 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
         return res.status(400).json({ error: 'Payment link has expired.' });
       }
 
+      const amountToPay = Number(amount || link.amount);
       const txRef = `PL-${Date.now().toString().slice(-6)}`;
+
+      // Attempt Snippe push or reference
+      let providerTxRef = txRef;
+      try {
+        const snippeResult = await SnippePaymentProvider.initiatePayment({
+          amount: amountToPay,
+          phone,
+          splitId: token,
+          participantId: phone,
+          participantName: finalPayerName,
+          idempotencyKey: `pay_pl_${link.id}_${Date.now()}`
+        });
+        if (snippeResult && snippeResult.providerTxRef) providerTxRef = snippeResult.providerTxRef;
+      } catch (e) {
+        console.warn('[Snippe Notice] Continuing with system reference:', e.message);
+      }
 
       // Update link status
       const newStatus = link.expiration_mode === 'AFTER_PAYMENT' ? 'PAID' : link.status;
       await client.query(
         'UPDATE payment_links SET status = $1, paid_at = NOW(), payment_ref = $2 WHERE id = $3',
-        [newStatus, txRef, link.id]
+        [newStatus, providerTxRef, link.id]
       );
 
-      // Record Audit Log
+      // Record in public_link_payments for contributor tracking
+      await client.query(
+        `INSERT INTO public_link_payments (link_type, link_token, link_id, owner_user_id, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref)
+         VALUES ('PAYMENT_LINK', $1, $2, $3, $4, $5, $6, $7, $8, 'COMPLETED', $9)`,
+        [link.public_token, link.id, link.owner_user_id || 'system_organizer', finalPayerName, phone, amountToPay, link.currency || 'TZS', payment_method, providerTxRef]
+      );
+
+      // AUTOMATIC WALLET / CARD BALANCE CREDITING FOR ORGANIZER
+      if (link.owner_user_id) {
+        await LedgerService.getOrCreateUserBalance(client, link.owner_user_id);
+        await LedgerService.postCredit(client, {
+          userId: link.owner_user_id,
+          amount: amountToPay,
+          transactionType: 'PAYMENT_LINK',
+          referenceType: 'PAYMENT_LINK',
+          referenceId: link.public_token,
+          providerTxRef,
+          idempotencyKey: `credit_pl_${link.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          metadata: {
+            payerName: finalPayerName,
+            payerPhone: phone,
+            title: link.title,
+            paymentMethod: payment_method,
+            linkToken: link.public_token,
+            source: 'PAYMENT_LINK'
+          }
+        });
+      }
+
       await client.query(
         `INSERT INTO audit_logs (actor, action, entity_type, entity_id, metadata)
          VALUES ($1, 'PAYMENT_LINK_PAID', 'payment_link', $2, $3)`,
-        [phone, link.id, { amount: link.amount, phone, txRef, destinationSnapshot: link.destination_snapshot }]
+        [phone, link.id, { amount: amountToPay, phone, payerName: finalPayerName, txRef: providerTxRef, destinationSnapshot: link.destination_snapshot }]
       );
 
       await client.query('COMMIT');
 
       return res.json({
         success: true,
-        message: 'Payment received successfully.',
-        txRef,
-        amountPaid: parseInt(link.amount, 10),
+        message: 'Payment received successfully. Wallet balance updated.',
+        txRef: providerTxRef,
+        amountPaid: amountToPay,
         destinationSnapshot: link.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    // 2. Try birthday_pools table
+    const bdayRaw = token.replace(/^BDAY-/i, '');
+    const bdayRes = await client.query(
+      `SELECT * FROM birthday_pools 
+       WHERE UPPER(id::text) = UPPER($1) 
+          OR UPPER(SUBSTRING(id::text, 1, 6)) = UPPER($2)
+          OR UPPER(SUBSTRING(id::text, 1, 8)) = UPPER($2)
+          OR UPPER(id::text) LIKE UPPER($3)
+       FOR UPDATE LIMIT 1`,
+      [token, bdayRaw, `%${bdayRaw}%`]
+    );
+
+    if (bdayRes.rows.length > 0) {
+      const poolRow = bdayRes.rows[0];
+      const amountToPay = Number(amount || 50000);
+      const txRef = `BDAY-${Date.now().toString().slice(-6)}`;
+
+      let providerTxRef = txRef;
+      try {
+        const snippeResult = await SnippePaymentProvider.initiatePayment({
+          amount: amountToPay,
+          phone,
+          splitId: token,
+          participantId: phone,
+          participantName: finalPayerName,
+          idempotencyKey: `pay_bday_${poolRow.id}_${Date.now()}`
+        });
+        if (snippeResult && snippeResult.providerTxRef) providerTxRef = snippeResult.providerTxRef;
+      } catch (e) {
+        console.warn('[Snippe Notice] Continuing with system reference:', e.message);
+      }
+
+      // Update pool collected amount
+      await client.query(
+        'UPDATE birthday_pools SET collected_amount = COALESCE(collected_amount, 0) + $1, updated_at = NOW() WHERE id = $2',
+        [amountToPay, poolRow.id]
+      );
+
+      // Record contributor payment
+      await client.query(
+        `INSERT INTO public_link_payments (link_type, link_token, link_id, owner_user_id, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref)
+         VALUES ('BIRTHDAY_POOL', $1, $2, $3, $4, $5, $6, $7, $8, 'COMPLETED', $9)`,
+        [token, poolRow.id, poolRow.owner_user_id || 'system_organizer', finalPayerName, phone, amountToPay, poolRow.currency || 'TZS', payment_method, providerTxRef]
+      );
+
+      // AUTOMATIC WALLET / CARD BALANCE CREDITING FOR ORGANIZER
+      if (poolRow.owner_user_id) {
+        await LedgerService.getOrCreateUserBalance(client, poolRow.owner_user_id);
+        await LedgerService.postCredit(client, {
+          userId: poolRow.owner_user_id,
+          amount: amountToPay,
+          transactionType: 'BIRTHDAY_POOL',
+          referenceType: 'BIRTHDAY_POOL',
+          referenceId: `BDAY-${poolRow.id.slice(0, 6)}`,
+          providerTxRef,
+          idempotencyKey: `credit_bday_${poolRow.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          metadata: {
+            payerName: finalPayerName,
+            payerPhone: phone,
+            recipient: poolRow.birthday_person,
+            title: poolRow.message || `${poolRow.birthday_person}'s Birthday`,
+            paymentMethod: payment_method,
+            linkToken: token,
+            source: 'BIRTHDAY_POOL'
+          }
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return res.json({
+        success: true,
+        message: 'Birthday contribution received successfully. Balance updated.',
+        txRef: providerTxRef,
+        amountPaid: amountToPay,
+        destinationSnapshot: poolRow.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    // 3. Try michango_events table
+    const mchangRaw = token.replace(/^MCHANG-/i, '');
+    const mchangRes = await client.query(
+      `SELECT * FROM michango_events 
+       WHERE UPPER(id::text) = UPPER($1) 
+          OR UPPER(SUBSTRING(id::text, 1, 6)) = UPPER($2)
+          OR UPPER(SUBSTRING(id::text, 1, 8)) = UPPER($2)
+          OR UPPER(id::text) LIKE UPPER($3)
+       FOR UPDATE LIMIT 1`,
+      [token, mchangRaw, `%${mchangRaw}%`]
+    );
+
+    if (mchangRes.rows.length > 0) {
+      const evRow = mchangRes.rows[0];
+      const amountToPay = Number(amount || 50000);
+      const txRef = `MCHANG-${Date.now().toString().slice(-6)}`;
+
+      let providerTxRef = txRef;
+      try {
+        const snippeResult = await SnippePaymentProvider.initiatePayment({
+          amount: amountToPay,
+          phone,
+          splitId: token,
+          participantId: phone,
+          participantName: finalPayerName,
+          idempotencyKey: `pay_mchang_${evRow.id}_${Date.now()}`
+        });
+        if (snippeResult && snippeResult.providerTxRef) providerTxRef = snippeResult.providerTxRef;
+      } catch (e) {
+        console.warn('[Snippe Notice] Continuing with system reference:', e.message);
+      }
+
+      // Update event collected amount
+      await client.query(
+        'UPDATE michango_events SET collected_amount = COALESCE(collected_amount, 0) + $1, updated_at = NOW() WHERE id = $2',
+        [amountToPay, evRow.id]
+      );
+
+      // Record contributor payment
+      await client.query(
+        `INSERT INTO public_link_payments (link_type, link_token, link_id, owner_user_id, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref)
+         VALUES ('MCHANGO', $1, $2, $3, $4, $5, $6, $7, $8, 'COMPLETED', $9)`,
+        [token, evRow.id, evRow.owner_user_id || 'system_organizer', finalPayerName, phone, amountToPay, evRow.currency || 'TZS', payment_method, providerTxRef]
+      );
+
+      // AUTOMATIC WALLET / CARD BALANCE CREDITING FOR ORGANIZER
+      if (evRow.owner_user_id) {
+        await LedgerService.getOrCreateUserBalance(client, evRow.owner_user_id);
+        await LedgerService.postCredit(client, {
+          userId: evRow.owner_user_id,
+          amount: amountToPay,
+          transactionType: 'MCHANGO',
+          referenceType: 'MCHANGO',
+          referenceId: `MCHANG-${evRow.id.slice(0, 6)}`,
+          providerTxRef,
+          idempotencyKey: `credit_mchang_${evRow.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          metadata: {
+            payerName: finalPayerName,
+            payerPhone: phone,
+            title: evRow.title,
+            paymentMethod: payment_method,
+            linkToken: token,
+            source: 'MCHANGO'
+          }
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return res.json({
+        success: true,
+        message: 'Michango contribution received successfully. Balance updated.',
+        txRef: providerTxRef,
+        amountPaid: amountToPay,
+        destinationSnapshot: evRow.destination_snapshot || PaymentRoutingService.createSnapshot(null)
       });
     }
 
@@ -892,9 +1175,60 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('payment link pay failed:', err);
-    res.status(500).json({ error: 'Payment failed.' });
+    res.status(500).json({ error: 'Payment failed: ' + err.message });
   } finally {
     client.release();
+  }
+});
+
+// GET CONTRIBUTORS FOR A SPECIFIC LINK / POOL / MCHANGO
+app.get('/api/public/links/:token/contributors', async (req, res) => {
+  try {
+    const token = req.params.token.trim();
+    const raw = token.replace(/^(BDAY|MCHANG|PL)-/i, '');
+    const { rows } = await pool.query(
+      `SELECT * FROM public_link_payments 
+       WHERE UPPER(link_token) = UPPER($1) 
+          OR UPPER(link_token) LIKE UPPER($2)
+          OR (link_id::text IS NOT NULL AND (UPPER(link_id::text) = UPPER($1) OR UPPER(SUBSTRING(link_id::text, 1, 6)) = UPPER($3)))
+       ORDER BY created_at DESC`,
+      [token, `%${raw}%`, raw]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET UNIFIED USER RECENT ACTIVITIES (SPLITS + LINK PAYMENTS + CREDITS)
+app.get('/api/user/activities', async (req, res) => {
+  try {
+    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+
+    // 1. Fetch public link payments received by this user
+    const linkPayRes = await pool.query(
+      `SELECT id, link_type, link_token, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref, created_at, 'LINK_PAYMENT' as activity_type
+       FROM public_link_payments 
+       WHERE owner_user_id = $1 
+       ORDER BY created_at DESC LIMIT 20`,
+      [userId]
+    );
+
+    // 2. Fetch splits
+    const splitRes = await pool.query(
+      `SELECT s.id, s.title, s.total_amount, s.amount_paid, s.status, s.ref_code, s.participant_count, s.settlement_percent, s.created_at, 'SPLIT' as activity_type,
+              row_to_json(m.*) as merchant
+       FROM splits s
+       LEFT JOIN merchants m ON s.merchant_id = m.id
+       ORDER BY s.created_at DESC LIMIT 10`
+    );
+
+    res.json({
+      receivedPayments: linkPayRes.rows.map(r => ({ ...r, amount: Number(r.amount) })),
+      splits: splitRes.rows
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

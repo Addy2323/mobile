@@ -4,6 +4,7 @@ import { formatMoney } from '@/lib/utils';
 import ProgressBar from '@/components/ProgressBar';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
+import { getOwnerId } from '@/lib/ownerId';
 
 interface BirthdayScreenProps {
   onBack: () => void;
@@ -23,6 +24,9 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pools, setPools] = useState<any[]>([]);
   const [loadingPools, setLoadingPools] = useState(false);
+  const [currentPool, setCurrentPool] = useState<any | null>(null);
+  const [contributors, setContributors] = useState<any[]>([]);
+  const [loadingContributors, setLoadingContributors] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -31,12 +35,35 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
   async function fetchPools() {
     setLoadingPools(true);
     try {
-      const res = await fetch('/api/birthday-pools');
-      if (res.ok) setPools(await res.json());
+      const ownerId = getOwnerId();
+      const res = await fetch(`/api/birthday-pools?owner_user_id=${encodeURIComponent(ownerId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPools(data);
+        if (data.length > 0) {
+          const active = data[0];
+          setCurrentPool(active);
+          fetchContributors(`BDAY-${active.id.slice(0, 6)}`);
+        }
+      }
     } catch (err) {
       console.error('Failed fetching pools:', err);
     } finally {
       setLoadingPools(false);
+    }
+  }
+
+  async function fetchContributors(token: string) {
+    setLoadingContributors(true);
+    try {
+      const res = await fetch(`/api/public/links/${encodeURIComponent(token)}/contributors`);
+      if (res.ok) {
+        setContributors(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed fetching pool contributors:', err);
+    } finally {
+      setLoadingContributors(false);
     }
   }
 
@@ -54,6 +81,7 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          owner_user_id: getOwnerId(),
           birthday_person: recipient,
           message: giftTitle,
           target_amount: parseFloat(targetAmount),
@@ -63,7 +91,10 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
 
       if (res.ok) {
         const pool = await res.json();
-        setGeneratedLink(`${window.location.origin}/s/BDAY-${pool.id.slice(0, 6)}`);
+        setCurrentPool(pool);
+        const linkToken = `BDAY-${pool.id.slice(0, 6)}`;
+        setGeneratedLink(`${window.location.origin}/s/${linkToken}`);
+        fetchContributors(linkToken);
         setActiveTab('tracker');
       } else {
         alert('Failed creating birthday pool');
@@ -248,6 +279,44 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
                 <span>{copied ? 'Copied!' : 'Copy Link'}</span>
               </button>
             </div>
+          </div>
+
+          {/* Real Contributors Tracker */}
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                Contributors ({contributors.length})
+              </h4>
+              <button
+                onClick={() => currentPool && fetchContributors(`BDAY-${currentPool.id.slice(0, 6)}`)}
+                disabled={loadingContributors}
+                className="text-xs font-bold text-pink-600 inline-flex items-center space-x-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingContributors ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {loadingContributors ? (
+              <div className="text-center py-4 text-xs text-slate-400">Loading contributors...</div>
+            ) : contributors.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">No contributions received yet. Share the link above!</p>
+            ) : (
+              <div className="space-y-2">
+                {contributors.map((c) => (
+                  <div key={c.id} className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100/60 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">{c.payer_name}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{c.payer_phone}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-pink-600 text-xs block">+{formatMoney(Number(c.amount))}</span>
+                      <span className="text-[9px] text-slate-400">{new Date(c.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

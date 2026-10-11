@@ -52,8 +52,14 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
 
   const getCleanName = () => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('lumo_user_name') : null;
-    const isBad = !raw || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) || raw.startsWith('user_');
-    return isBad ? 'Given Mhema' : raw;
+    const isBad =
+      !raw ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ||
+      raw.startsWith('user_') ||
+      /\d/.test(raw) ||
+      raw.toLowerCase() === 'user' ||
+      raw.trim().length < 2;
+    return isBad ? 'Given Mhema' : raw.trim();
   };
 
   const getCleanPhone = () => {

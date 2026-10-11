@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, HeartHandshake, CheckCircle2, Clock, Plus, Users, Sparkles, MessageCircle, Copy, Check } from 'lucide-react';
+import { ArrowLeft, HeartHandshake, CheckCircle2, Clock, Plus, Users, Sparkles, MessageCircle, Copy, Check, RefreshCw } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 import ProgressBar from '@/components/ProgressBar';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
+import { getOwnerId } from '@/lib/ownerId';
 
 interface MichangoScreenProps {
   onBack: () => void;
@@ -23,6 +24,11 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
   const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [events, setEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [currentEvent, setCurrentEvent] = useState<any | null>(null);
+  const [contributors, setContributors] = useState<any[]>([]);
+  const [loadingContributors, setLoadingContributors] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -36,6 +42,45 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
     { name: 'Ujenzi', label: 'Building' },
   ];
 
+  async function fetchEvents() {
+    setLoadingEvents(true);
+    try {
+      const ownerId = getOwnerId();
+      const res = await fetch(`/api/michango-events?owner_user_id=${encodeURIComponent(ownerId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEvents(data);
+        if (data.length > 0) {
+          const active = data[0];
+          setCurrentEvent(active);
+          fetchContributors(`MCHANG-${active.id.slice(0, 6)}`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed fetching michango events:', err);
+    } finally {
+      setLoadingEvents(false);
+    }
+  }
+
+  async function fetchContributors(token: string) {
+    setLoadingContributors(true);
+    try {
+      const res = await fetch(`/api/public/links/${encodeURIComponent(token)}/contributors`);
+      if (res.ok) {
+        setContributors(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed fetching contributors:', err);
+    } finally {
+      setLoadingContributors(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'tracker') fetchEvents();
+  }, [activeTab]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !targetAmount) return;
@@ -46,6 +91,7 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          owner_user_id: getOwnerId(),
           title,
           event_type: category === 'Harusi' ? 'WEDDING' : category === 'Msiba' ? 'FUNERAL' : category === 'Matibabu' ? 'MEDICAL' : 'OTHER',
           target_amount: parseFloat(targetAmount),
@@ -55,7 +101,10 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
 
       if (res.ok) {
         const ev = await res.json();
-        setGeneratedLink(`${window.location.origin}/s/MCHANG-${ev.id.slice(0, 6)}`);
+        setCurrentEvent(ev);
+        const linkToken = `MCHANG-${ev.id.slice(0, 6)}`;
+        setGeneratedLink(`${window.location.origin}/s/${linkToken}`);
+        fetchContributors(linkToken);
         setActiveTab('tracker');
       } else {
         alert('Failed creating Michango campaign');
@@ -209,16 +258,35 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
             </div>
 
             <div>
-              <h3 className="text-2xl font-black">{title}</h3>
-              <p className="text-amber-100 text-xs mt-0.5">Target: {formatMoney(totalTarget)}</p>
+              <h3 className="text-2xl font-black">{currentEvent?.title || title}</h3>
+              <p className="text-amber-100 text-xs mt-0.5">Target: {formatMoney(Number(currentEvent?.target_amount || totalTarget))}</p>
             </div>
 
             <div className="space-y-1.5 pt-2">
               <div className="flex justify-between items-center text-xs font-bold">
-                <span>Collected: TZS 0</span>
-                <span>0% Settled</span>
+                <span>Collected: {formatMoney(Number(currentEvent?.collected_amount || 0))}</span>
+                <span>
+                  {Math.min(
+                    100,
+                    Math.round(
+                      ((Number(currentEvent?.collected_amount || 0)) /
+                        (Number(currentEvent?.target_amount || totalTarget) || 1)) *
+                        100
+                    )
+                  )}
+                  % Settled
+                </span>
               </div>
-              <ProgressBar percent={0} />
+              <ProgressBar
+                percent={Math.min(
+                  100,
+                  Math.round(
+                    ((Number(currentEvent?.collected_amount || 0)) /
+                      (Number(currentEvent?.target_amount || totalTarget) || 1)) *
+                      100
+                  )
+                )}
+              />
             </div>
           </div>
 
@@ -244,6 +312,44 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
                 <span>{copied ? 'Copied!' : 'Copy Link'}</span>
               </button>
             </div>
+          </div>
+
+          {/* Real Contributors Tracker */}
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                Contributors ({contributors.length})
+              </h4>
+              <button
+                onClick={() => currentEvent && fetchContributors(`MCHANG-${currentEvent.id.slice(0, 6)}`)}
+                disabled={loadingContributors}
+                className="text-xs font-bold text-amber-600 inline-flex items-center space-x-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingContributors ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {loadingContributors ? (
+              <div className="text-center py-4 text-xs text-slate-400">Loading contributors...</div>
+            ) : contributors.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">No pledges or contributions received yet. Share the link above!</p>
+            ) : (
+              <div className="space-y-2">
+                {contributors.map((c) => (
+                  <div key={c.id} className="p-3 bg-amber-50/40 rounded-2xl border border-amber-100/60 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">{c.payer_name}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{c.payer_phone}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-amber-600 text-xs block">+{formatMoney(Number(c.amount))}</span>
+                      <span className="text-[9px] text-slate-400">{new Date(c.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

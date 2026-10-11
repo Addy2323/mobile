@@ -23,6 +23,7 @@ import { DepositModal } from '@/components/DepositModal';
 import { WithdrawModal } from '@/components/WithdrawModal';
 import { VipTierShowcase } from '@/components/VipTierShowcase';
 import { fetchUserCardBalance } from '@/lib/ledgerApi';
+import { getOwnerId } from '@/lib/ownerId';
 
 export interface HomeScreenProps {
   language: Language;
@@ -38,6 +39,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateQuickAction,
 }) => {
   const [splits, setSplits] = useState<(Split & { merchant?: Merchant | null })[]>([]);
+  const [receivedPayments, setReceivedPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -62,8 +64,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     loadBalanceInfo();
   }, [cardRefreshTrigger]);
 
-  async function fetchSplits() {
+  async function fetchActivities() {
     try {
+      const ownerId = getOwnerId();
+      // 1. Fetch user activities from server endpoint
+      const res = await fetch(`/api/user/activities?user_id=${encodeURIComponent(ownerId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.receivedPayments)) {
+          setReceivedPayments(json.receivedPayments);
+        }
+        if (Array.isArray(json.splits) && json.splits.length > 0) {
+          setSplits(json.splits);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+      }
+
+      // 2. Direct Supabase query fallback for splits
       const { data, error } = await supabase
         .from('splits')
         .select('*, merchant:merchants(*)')
@@ -74,7 +93,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         setSplits(data as (Split & { merchant?: Merchant | null })[]);
       }
     } catch (err) {
-      console.error('Error fetching home splits:', err);
+      console.error('Error fetching activities:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -82,12 +101,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }
 
   useEffect(() => {
-    fetchSplits();
-  }, []);
+    fetchActivities();
+  }, [cardRefreshTrigger]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchSplits();
+    setCardRefreshTrigger(prev => prev + 1);
+    fetchActivities();
   };
 
   return (
@@ -249,60 +269,108 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <CardSkeleton />
             <CardSkeleton />
           </div>
-        ) : splits.length === 0 ? (
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center space-y-3">
-            <Zap className="w-8 h-8 text-slate-300 mx-auto" />
-            <div className="space-y-1">
-              <p className="text-sm font-bold text-slate-700">No active splits yet</p>
-              <p className="text-xs text-slate-400">
-                Create a split or share a payment link to get started!
-              </p>
-            </div>
-            <button
-              onClick={onCreate}
-              className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl active:scale-95 transition-all inline-flex items-center space-x-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create First Split</span>
-            </button>
-          </div>
         ) : (
-          <div className="space-y-2.5">
-            {splits.map((split) => (
-              <div
-                key={split.id}
-                onClick={() => onSplitClick(split)}
-                className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer space-y-2.5"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="space-y-0.5 min-w-0 pr-2">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-extrabold text-slate-900 text-sm truncate">
-                        {split.title}
-                      </span>
+          <div className="space-y-3">
+            {/* Incoming Received Link & Pool Payments */}
+            {receivedPayments.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+                    Incoming Contributions & Links
+                  </span>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full border border-emerald-100">
+                    +{receivedPayments.length} credited
+                  </span>
+                </div>
+
+                {receivedPayments.map((p) => (
+                  <div
+                    key={p.id}
+                    className="bg-white p-3.5 rounded-2xl border border-emerald-100 shadow-xs flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                        💰
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-extrabold text-slate-900 text-xs">{p.payer_name}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold uppercase">
+                            {p.link_type?.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {p.payer_phone} · {timeAgo(p.created_at)}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400 truncate">
-                      {split.merchant?.display_name || 'Verified merchant'} · {split.participant_count} people · {timeAgo(split.created_at)}
-                    </p>
+
+                    <div className="text-right">
+                      <span className="text-xs font-black text-emerald-600 block">+{formatMoney(Number(p.amount))}</span>
+                      <span className="text-[9px] text-slate-400 font-mono">{p.provider_tx_ref}</span>
+                    </div>
                   </div>
-
-                  <StatusBadge status={split.status as any} />
-                </div>
-
-                <div className="space-y-1.5 pt-1 border-t border-slate-100/80">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-extrabold text-slate-900">
-                      {formatMoney(split.total_amount)}
-                    </span>
-                    <span className="font-bold text-emerald-600">
-                      {formatMoney(split.amount_paid)} paid ({split.settlement_percent || 0}%)
-                    </span>
-                  </div>
-
-                  <ProgressBar percent={split.settlement_percent || 0} size="sm" />
-                </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Splits Activity */}
+            {splits.length === 0 && receivedPayments.length === 0 ? (
+              <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center space-y-3">
+                <Zap className="w-8 h-8 text-slate-300 mx-auto" />
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-slate-700">No active splits yet</p>
+                  <p className="text-xs text-slate-400">
+                    Create a split or share a payment link to get started!
+                  </p>
+                </div>
+                <button
+                  onClick={onCreate}
+                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl active:scale-95 transition-all inline-flex items-center space-x-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create First Split</span>
+                </button>
+              </div>
+            ) : splits.length > 0 ? (
+              <div className="space-y-2.5">
+                {splits.map((split) => (
+                  <div
+                    key={split.id}
+                    onClick={() => onSplitClick(split)}
+                    className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-0.5 min-w-0 pr-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-extrabold text-slate-900 text-sm truncate">
+                            {split.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 truncate">
+                          {split.merchant?.display_name || 'Verified merchant'} · {split.participant_count} people · {timeAgo(split.created_at)}
+                        </p>
+                      </div>
+
+                      <StatusBadge status={split.status as any} />
+                    </div>
+
+                    <div className="space-y-1.5 pt-1 border-t border-slate-100/80">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-extrabold text-slate-900">
+                          {formatMoney(split.total_amount)}
+                        </span>
+                        <span className="font-bold text-emerald-600">
+                          {formatMoney(split.amount_paid)} paid ({split.settlement_percent || 0}%)
+                        </span>
+                      </div>
+
+                      <ProgressBar percent={split.settlement_percent || 0} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
