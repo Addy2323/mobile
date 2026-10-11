@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Phone, Globe, CreditCard, Shield, Store, Settings, LogOut, Download, Bell, ChevronRight, Check } from 'lucide-react';
 import { getTranslation, type Language } from '@/lib/i18n';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface ProfileScreenProps {
   language: Language;
@@ -77,6 +78,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const t = (key: any) => getTranslation(key, language);
 
+  useBodyScrollLock(showEditModal);
+
   return (
     <div className="p-4 space-y-6 no-tap-highlight">
       {/* User Header */}
@@ -112,8 +115,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       {/* Edit Profile Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn overscroll-contain"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowEditModal(false);
+          }}
+          onTouchMove={(e) => {
+            if (e.target === e.currentTarget) e.preventDefault();
+          }}
+        >
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 overscroll-contain">
             <div className="flex items-center justify-between">
               <h3 className="font-extrabold text-slate-900 text-base">Edit Cardholder Profile</h3>
               <button

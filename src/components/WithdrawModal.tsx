@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ArrowUpRight, Smartphone, Building, ShieldAlert, Loader2, CheckCircle } from 'lucide-react';
 import { requestWithdrawal } from '../lib/ledgerApi';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface WithdrawModalProps {
   availableBalance: number;
@@ -9,12 +10,13 @@ interface WithdrawModalProps {
 }
 
 export const WithdrawModal: React.FC<WithdrawModalProps> = ({ availableBalance, onClose, onSuccess }) => {
+  useBodyScrollLock();
   const [amount, setAmount] = useState<string>('15000');
   const [destType, setDestType] = useState<'MOBILE_MONEY' | 'BANK'>('MOBILE_MONEY');
-  const [phone, setPhone] = useState<string>('255754123456');
+  const [phone, setPhone] = useState<string>(() => localStorage.getItem('lumo_user_phone') || '');
   const [bankName, setBankName] = useState<string>('CRDB Bank');
-  const [accountNumber, setAccountNumber] = useState<string>('0152849204820');
-  const [recipientName, setRecipientName] = useState<string>('Dev Stromer');
+  const [accountNumber, setAccountNumber] = useState<string>('');
+  const [recipientName, setRecipientName] = useState<string>(() => localStorage.getItem('lumo_user_name') || '');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +57,16 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ availableBalance, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overscroll-contain"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
+    >
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain dark-scrollbar">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-white bg-slate-800/80 transition-colors"

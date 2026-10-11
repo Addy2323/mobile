@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Smartphone, CheckCircle, AlertCircle, Loader2, ArrowRight, RefreshCw, ShieldCheck } from 'lucide-react';
 import { initiateDeposit, checkDepositStatus, type DepositStatusResult } from '../lib/ledgerApi';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface DepositModalProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ const QUICK_AMOUNTS = [5000, 10000, 25000, 50000, 100000];
 type Step = 'INPUT' | 'WAITING_PIN' | 'SUCCESS' | 'FAILED';
 
 export const DepositModal: React.FC<DepositModalProps> = ({ onClose, onSuccess }) => {
+  useBodyScrollLock();
   const [step, setStep] = useState<Step>('INPUT');
   const [amount, setAmount] = useState<string>('10000');
   const [phone, setPhone] = useState<string>(''); // Clean, no pre-filled numbers
@@ -147,8 +149,16 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose, onSuccess }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overscroll-contain"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && step !== 'WAITING_PIN') onClose();
+      }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
+    >
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain dark-scrollbar">
         {step !== 'WAITING_PIN' && (
           <button
             onClick={onClose}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Award, CheckCircle2, Sparkles, ShieldCheck, Zap } from 'lucide-react';
 import { VIP_TIER_STYLES } from './LumoMemberCard';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface VipTierShowcaseProps {
   currentTier: string;
@@ -17,9 +18,19 @@ const TIERS_LIST = [
 ];
 
 export const VipTierShowcase: React.FC<VipTierShowcaseProps> = ({ currentTier, txCount, onClose }) => {
+  useBodyScrollLock();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overscroll-contain"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
+    >
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto overscroll-contain dark-scrollbar">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-white bg-slate-800/80 transition-colors"
