@@ -15,10 +15,15 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ token }) => 
   const [suspensionReason, setSuspensionReason] = useState('');
   const [suspending, setSuspending] = useState(false);
 
-  const getHeaders = () => ({
-    Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}`,
-    'x-admin-key': token
-  });
+  const getHeaders = () => {
+    const headers: Record<string, string> = {
+      Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}`
+    };
+    if (!token.includes('.')) {
+      headers['x-admin-key'] = token;
+    }
+    return headers;
+  };
 
   const fetchUsers = async () => {
     try {

@@ -5,10 +5,15 @@ interface OpsProps {
   token: string;
 }
 
-const getHeaders = (token: string) => ({
-  Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}`,
-  'x-admin-key': token
-});
+const getHeaders = (token: string) => {
+  const headers: Record<string, string> = {
+    Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}`
+  };
+  if (!token.includes('.')) {
+    headers['x-admin-key'] = token;
+  }
+  return headers;
+};
 
 // -------------------------------------------------------------
 // SPLITS OPERATIONS SCREEN

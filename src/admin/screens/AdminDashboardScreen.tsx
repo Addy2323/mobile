@@ -27,11 +27,10 @@ export const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ toke
   const fetchStats = async () => {
     try {
       setRefreshing(true);
-      const headers: Record<string, string> = {};
-      if (token.startsWith('Bearer ')) {
-        headers['Authorization'] = token;
-      } else {
-        headers['Authorization'] = `Bearer ${token}`;
+      const headers: Record<string, string> = {
+        Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}`
+      };
+      if (!token.includes('.')) {
         headers['x-admin-key'] = token;
       }
 
