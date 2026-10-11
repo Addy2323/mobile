@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronRight,
   ArrowLeft,
@@ -33,6 +33,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [confirmPin, setConfirmPin] = useState(['', '', '', '']);
   const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
   const [error, setError] = useState('');
+
+  // Lock body & html background to #060D0E during onboarding to eliminate any white gaps or bars
+  useEffect(() => {
+    const origBodyBg = document.body.style.backgroundColor;
+    const origHtmlBg = document.documentElement.style.backgroundColor;
+    document.body.style.backgroundColor = '#060D0E';
+    document.documentElement.style.backgroundColor = '#060D0E';
+
+    return () => {
+      document.body.style.backgroundColor = origBodyBg;
+      document.documentElement.style.backgroundColor = origHtmlBg;
+    };
+  }, []);
 
   // Touch gesture state for horizontal swiping
   const touchStartXRef = useRef<number | null>(null);
@@ -191,23 +204,26 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   return (
-    <div className="min-h-dvh w-full bg-[#060D0E] text-slate-100 flex flex-col justify-center items-center relative overflow-hidden select-none font-sans">
-      {/* Ambient luxury emerald wave ribbons */}
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-[#060D0E] text-slate-100 flex flex-col justify-between items-center select-none font-sans"
+      style={{ backgroundColor: '#060D0E' }}
+    >
+      {/* Corner-only subtle luxury emerald wave ribbons - Strictly outside the content area */}
       <svg
-        className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0"
+        className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0"
         preserveAspectRatio="none"
         viewBox="0 0 400 850"
       >
         <defs>
-          <linearGradient id="lumoWave1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#00E599" stopOpacity="0.85" />
-            <stop offset="45%" stopColor="#059669" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#042018" stopOpacity="0.05" />
+          <linearGradient id="lumoCornerWave1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00E599" stopOpacity="0.7" />
+            <stop offset="60%" stopColor="#059669" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#042018" stopOpacity="0.0" />
           </linearGradient>
-          <linearGradient id="lumoWave2" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#042018" stopOpacity="0.05" />
-            <stop offset="60%" stopColor="#059669" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#00E599" stopOpacity="0.75" />
+          <linearGradient id="lumoCornerWave2" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#042018" stopOpacity="0.0" />
+            <stop offset="50%" stopColor="#059669" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#00E599" stopOpacity="0.65" />
           </linearGradient>
           <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -215,62 +231,46 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </filter>
         </defs>
 
-        {/* Top-left to top-right flowing ribbons */}
+        {/* Top-left extreme corner ribbons only (never passes through logo or image) */}
         <path
-          d="M -40,160 C 50,110 110,40 270,-10"
+          d="M -50,90 C -10,60 30,25 90,-20"
           fill="none"
-          stroke="url(#lumoWave1)"
-          strokeWidth="2.5"
+          stroke="url(#lumoCornerWave1)"
+          strokeWidth="2"
           filter="url(#softGlow)"
-          opacity="0.8"
+          opacity="0.6"
         />
         <path
-          d="M -30,130 C 70,85 130,20 310,-30"
+          d="M -40,120 C 10,80 50,40 120,-10"
           fill="none"
-          stroke="url(#lumoWave1)"
+          stroke="url(#lumoCornerWave1)"
           strokeWidth="1.2"
-          opacity="0.5"
-        />
-        <path
-          d="M -60,200 C 40,140 100,50 250,0"
-          fill="none"
-          stroke="url(#lumoWave1)"
-          strokeWidth="5"
-          opacity="0.25"
-          filter="url(#softGlow)"
+          opacity="0.35"
         />
 
-        {/* Bottom-right flowing wave ribbons */}
+        {/* Bottom-right extreme corner ribbons only */}
         <path
-          d="M 120,860 C 220,790 310,740 450,700"
+          d="M 230,860 C 290,820 360,780 460,750"
           fill="none"
-          stroke="url(#lumoWave2)"
+          stroke="url(#lumoCornerWave2)"
           strokeWidth="2.5"
           filter="url(#softGlow)"
-          opacity="0.75"
+          opacity="0.6"
         />
         <path
-          d="M 170,860 C 255,815 340,775 460,745"
+          d="M 270,860 C 330,830 390,800 470,780"
           fill="none"
-          stroke="url(#lumoWave2)"
+          stroke="url(#lumoCornerWave2)"
           strokeWidth="1.2"
-          opacity="0.45"
-        />
-        <path
-          d="M 80,870 C 190,780 290,720 450,670"
-          fill="none"
-          stroke="url(#lumoWave2)"
-          strokeWidth="6"
-          opacity="0.2"
-          filter="url(#softGlow)"
+          opacity="0.35"
         />
       </svg>
 
-      {/* Radial center glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[420px] h-[340px] sm:h-[420px] bg-[#00E599]/[0.08] rounded-full blur-[90px] pointer-events-none z-0" />
-
-      {/* Main Container - Optimized & Centered for Mobile, Tablets & iPads */}
-      <div className="w-full max-w-md sm:max-w-lg mx-auto flex-1 flex flex-col justify-between relative z-10 px-6 py-6 sm:py-8 min-h-dvh">
+      {/* Main Container - Centered and full-height without white borders or gaps */}
+      <div
+        className="w-full max-w-md sm:max-w-lg mx-auto min-h-full flex-1 flex flex-col justify-between relative z-10 px-6 pt-7 pb-8 sm:pt-9 sm:pb-10"
+        style={{ minHeight: '100dvh' }}
+      >
         {/* Step 1: Carousel Slides */}
         {step === 'carousel' && (
           <div
@@ -279,12 +279,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             onTouchEnd={handleTouchEnd}
           >
             {/* Header: LUMO Split Brand + Skip Button */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#06241D] to-[#0D382E] border border-[#00E599]/40 flex items-center justify-center text-[#00E599] shadow-[0_0_15px_rgba(0,229,153,0.25)]">
-                  <div className="flex items-center gap-0.5">
-                    <span className="text-sm font-black tracking-tighter">[|]</span>
-                  </div>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#06241D] to-[#0D382E] border border-[#00E599]/40 flex items-center justify-center text-[#00E599] shadow-[0_0_12px_rgba(0,229,153,0.2)]">
+                  <span className="text-xs font-black tracking-tight">[|]</span>
                 </div>
                 <div className="flex flex-col leading-tight">
                   <span className="text-xl font-extrabold text-white tracking-tight flex items-center">
@@ -305,21 +303,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
 
             {/* Slide Center Graphic & Copy */}
-            <div className="my-auto flex flex-col items-center text-center px-2 py-4">
+            <div className="my-auto flex flex-col items-center text-center px-1 py-4">
               {slides[carouselIndex].type === 'image' ? (
-                /* Slide 1: Dining Group Photo with neon emerald glowing rounded frame */
-                <div className="relative w-full max-w-[320px] sm:max-w-[340px] aspect-[4/3] rounded-[28px] overflow-hidden border-2 border-[#00E599]/50 shadow-[0_0_40px_rgba(0,229,153,0.35)] mb-7 mx-auto group">
+                /* Slide 1: Clean, natural group photo without circular halos or rings */
+                <div className="w-full max-w-[330px] sm:max-w-[350px] aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl mb-7 mx-auto">
                   <img
                     src={slides[carouselIndex].imageSrc}
                     alt="Group of friends splitting a restaurant bill"
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                    className="w-full h-full object-cover object-center"
                   />
-                  {/* Subtle luxury edge gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#060D0E]/60 via-transparent to-transparent pointer-events-none" />
                 </div>
               ) : (
                 /* Slides 2 & 3: Glowing rounded neon card */
-                <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-[32px] bg-gradient-to-b from-[#09221D] to-[#041210] border-2 border-[#00E599] shadow-[0_0_45px_rgba(0,229,153,0.4)] flex items-center justify-center mb-7 mx-auto relative transition-all duration-300">
+                <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-[32px] bg-gradient-to-b from-[#09221D] to-[#041210] border-2 border-[#00E599] shadow-[0_0_40px_rgba(0,229,153,0.35)] flex items-center justify-center mb-7 mx-auto relative transition-all duration-300">
                   <div className="absolute inset-0 rounded-[30px] bg-[#00E599]/[0.05] pointer-events-none" />
                   {slides[carouselIndex].icon}
                 </div>
@@ -335,7 +331,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
 
             {/* Bottom Controls: Elongated Active Dot + Emerald Gradient Pill Button */}
-            <div className="space-y-6 pb-4 sm:pb-6">
+            <div className="space-y-6 pb-2">
               {/* Pagination Dots */}
               <div className="flex justify-center items-center gap-2">
                 {slides.map((_, idx) => (
@@ -355,7 +351,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               {/* Action Button */}
               <button
                 onClick={handleNextSlide}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_28px_rgba(0,229,153,0.38)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_28px_rgba(0,229,153,0.38)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{carouselIndex === slides.length - 1 ? t('getStarted') : t('continue')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
@@ -367,7 +363,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 2: Language Selection */}
         {step === 'language' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setStep('carousel')}
                 className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
@@ -409,10 +405,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             </div>
 
-            <div className="pb-4 sm:pb-6">
+            <div className="pb-2">
               <button
                 onClick={() => setStep('phone')}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{t('continue')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
@@ -424,7 +420,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 3: Phone Number Input */}
         {step === 'phone' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setStep('language')}
                 className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
@@ -457,10 +453,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               {error && <p className="text-rose-400 text-xs font-semibold">{error}</p>}
             </form>
 
-            <div className="pb-4 sm:pb-6">
+            <div className="pb-2">
               <button
                 onClick={handleSendOtp}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{t('sendCode')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
@@ -472,7 +468,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 4: OTP Verification */}
         {step === 'otp' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setStep('phone')}
                 className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
@@ -505,10 +501,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             </div>
 
-            <div className="pb-4 sm:pb-6">
+            <div className="pb-2">
               <button
                 onClick={handleVerifyOtp}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{t('verifyCode')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
@@ -520,7 +516,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 5: Name Input */}
         {step === 'name' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setStep('otp')}
                 className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
@@ -547,10 +543,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               {error && <p className="text-rose-400 text-xs font-semibold">{error}</p>}
             </form>
 
-            <div className="pb-4 sm:pb-6">
+            <div className="pb-2">
               <button
                 onClick={handleSaveName}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{t('continue')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
@@ -562,7 +558,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 6: 4-Digit Security PIN */}
         {step === 'pin' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setStep('name')}
                 className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
@@ -636,7 +632,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 7: Biometric Setup */}
         {step === 'biometric' && (
           <div className="flex-1 flex flex-col justify-between">
-            <div className="pt-2" />
+            <div className="pt-1" />
 
             <div className="my-auto text-center space-y-6">
               <div className="w-20 h-20 bg-[#0B2520] border-2 border-[#00E599]/60 rounded-full flex items-center justify-center mx-auto text-[#00E599] shadow-[0_0_30px_rgba(0,229,153,0.4)] animate-pulse">
@@ -654,10 +650,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 pb-4 sm:pb-6">
+            <div className="space-y-3 pb-2">
               <button
                 onClick={finishOnboarding}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>Enable & Finish Setup</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
