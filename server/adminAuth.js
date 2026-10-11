@@ -1,7 +1,8 @@
+import 'dotenv/config';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'lumo_split_admin_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
 const PASSWORD_SALT = process.env.PASSWORD_SALT || 'lumo_admin_secure_salt_2026_v1';
 
 /**

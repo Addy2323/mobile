@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { createAdminAuthMiddleware, requirePermission, logAdminAuditAction, hashPassword } from './adminAuth.js';
 import { ApplicationIntegrationService } from './applicationIntegrationService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'lumo_split_admin_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export function createAdminRouter(pool) {
   const router = express.Router();
@@ -90,12 +91,17 @@ export function createAdminRouter(pool) {
   router.get('/dashboard-stats', requirePermission('reports.view'), async (req, res) => {
     try {
       // 1. Total & Active Users
-      const usersRes = await pool.query(`
+      let usersRes = { rows: [{ total_users: 0, active_users: 0 }] };
+      try {
+        usersRes = await pool.query(`
         SELECT 
           COUNT(*)::int AS total_users,
           COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS active_users
         FROM users
       `);
+      } catch (e) {
+        console.warn('[Admin dashboard] users table unavailable:', e.message);
+      }
 
       // 2. Splits count
       const splitsRes = await pool.query('SELECT COUNT(*)::int AS total_splits FROM splits');
