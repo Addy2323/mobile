@@ -75,6 +75,28 @@ export async function initiateDeposit(amount: number, phone: string, provider: s
   return data;
 }
 
+export type DepositStatusResult = {
+  status: 'SUCCESS' | 'PENDING' | 'FAILED';
+  isPaid: boolean;
+  isFailed?: boolean;
+  depositRef?: string;
+  amount?: number;
+  message?: string;
+};
+
+export async function checkDepositStatus(depositRef?: string, providerTxRef?: string, amount?: number): Promise<DepositStatusResult> {
+  const userId = getOwnerId();
+  const params = new URLSearchParams();
+  params.set('user_id', userId);
+  if (depositRef) params.set('deposit_ref', depositRef);
+  if (providerTxRef) params.set('provider_tx_ref', providerTxRef);
+  if (amount) params.set('amount', amount.toString());
+
+  const res = await fetch(`${API_BASE}/user/deposits/status?${params.toString()}`);
+  if (!res.ok) throw new Error('Could not verify deposit status');
+  return res.json();
+}
+
 export async function requestWithdrawal(amount: number, destinationType: 'MOBILE_MONEY' | 'BANK', destinationDetails: any) {
   const userId = getOwnerId();
   const res = await fetch(`${API_BASE}/user/withdrawals/request`, {

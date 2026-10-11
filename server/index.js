@@ -273,9 +273,9 @@ app.post('/api/user/deposits/initiate', async (req, res) => {
       [userId, numAmount, refCode, snippeResult.providerTxRef, idempotencyKey, { phone, provider }]
     );
 
-    // If sandbox / local simulation mode, auto-confirm credit after initiation
+    // If explicitly instructed by sandbox config, auto-confirm credit after initiation
     let isConfirmedImmediately = false;
-    if (process.env.AUTO_CONFIRM_SANDBOX_DEPOSITS === 'true' || process.env.NODE_ENV !== 'production') {
+    if (process.env.AUTO_CONFIRM_SANDBOX_DEPOSITS === 'true') {
       await LedgerService.postCredit(client, {
         userId,
         amount: numAmount,
@@ -303,6 +303,116 @@ app.post('/api/user/deposits/initiate', async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 3.1 Check Deposit Status & Reconcile if confirmed
+app.get('/api/user/deposits/status', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const depositRef = req.query.deposit_ref;
+    const providerTxRef = req.query.provider_tx_ref;
+
+    if (!depositRef && !providerTxRef) {
+      return res.status(400).json({ error: 'deposit_ref or provider_tx_ref required' });
+    }
+
+    // 1. Check ledger_transactions for this deposit
+    const txQuery = `
+      SELECT * FROM ledger_transactions 
+      WHERE user_id = $1 AND (reference_id = $2 OR provider_tx_ref = $3)
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    const { rows } = await client.query(txQuery, [userId, depositRef, providerTxRef]);
+    const tx = rows[0];
+
+    // If transaction already marked COMPLETED (e.g. by Snippe webhook or previously confirmed)
+    if (tx && tx.status === 'COMPLETED') {
+      return res.json({
+        status: 'SUCCESS',
+        isPaid: true,
+        depositRef: tx.reference_id,
+        amount: Number(tx.amount),
+        message: 'Deposit confirmed & balance credited!'
+      });
+    }
+
+    // If marked FAILED
+    if (tx && tx.status === 'FAILED') {
+      return res.json({
+        status: 'FAILED',
+        isPaid: false,
+        isFailed: true,
+        depositRef: tx.reference_id,
+        message: 'Deposit transaction failed.'
+      });
+    }
+
+    // 2. If PENDING, check with Snippe directly using providerTxRef
+    const refToCheck = providerTxRef || tx?.provider_tx_ref;
+    if (refToCheck && refToCheck !== 'SNP-DEP-CONFIRMED' && !refToCheck.startsWith('DEP-')) {
+      const snippeStatus = await SnippePaymentProvider.getPaymentStatus(refToCheck);
+      if (snippeStatus && snippeStatus.isPaid) {
+        // Automatically credit user ledger if not already credited
+        const depositAmount = Number(tx?.amount || req.query.amount || 0);
+        if (depositAmount > 0) {
+          await client.query('BEGIN');
+          await LedgerService.postCredit(client, {
+            userId,
+            amount: depositAmount,
+            transactionType: 'DEPOSIT',
+            referenceType: 'DEPOSIT',
+            referenceId: depositRef || tx?.reference_id,
+            providerTxRef: refToCheck,
+            idempotencyKey: `credit_poll_${depositRef || refToCheck}`,
+            metadata: snippeStatus.data || {}
+          });
+          // Update transaction to COMPLETED
+          await client.query(
+            `UPDATE ledger_transactions SET status = 'COMPLETED' WHERE user_id = $1 AND (reference_id = $2 OR provider_tx_ref = $3)`,
+            [userId, depositRef, refToCheck]
+          );
+          await client.query('COMMIT');
+        }
+
+        return res.json({
+          status: 'SUCCESS',
+          isPaid: true,
+          depositRef: depositRef || tx?.reference_id,
+          amount: Number(tx?.amount || 0),
+          message: 'Deposit confirmed via Snippe & balance credited!'
+        });
+      }
+
+      if (snippeStatus && snippeStatus.isFailed) {
+        await client.query(
+          `UPDATE ledger_transactions SET status = 'FAILED' WHERE user_id = $1 AND (reference_id = $2 OR provider_tx_ref = $3)`,
+          [userId, depositRef, refToCheck]
+        );
+        return res.json({
+          status: 'FAILED',
+          isPaid: false,
+          isFailed: true,
+          depositRef: depositRef || tx?.reference_id,
+          message: 'Deposit was cancelled or rejected by network.'
+        });
+      }
+    }
+
+    // Still pending
+    return res.json({
+      status: 'PENDING',
+      isPaid: false,
+      depositRef: depositRef || tx?.reference_id,
+      message: 'Awaiting USSD PIN approval on user mobile device.'
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error checking deposit status:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
