@@ -28,11 +28,7 @@ const categories = [
   { id: 'other', label: 'Other', icon: FileText },
 ];
 
-const contacts = [
-  { name: 'Kelvin Mushi', phone: '+255 712 345 678' },
-  { name: 'Asha Daniel', phone: '+255 754 222 111' },
-  { name: 'Neema Joseph', phone: '+255 765 333 222' },
-];
+const contacts: { name: string; phone: string }[] = [];
 
 export type CreationType = 'standard' | 'pay_link' | 'birthday' | 'michango';
 
@@ -94,8 +90,21 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
   const [recipient, setRecipient] = useState('');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [participants, setParticipants] = useState<ParticipantInput[]>([{ name: '', phone: '', amount: 0 }]);
-  const [organizerName, setOrganizerName] = useState('Ado Daniel');
-  const [organizerPhone, setOrganizerPhone] = useState('');
+  const [organizerName, setOrganizerName] = useState(() => {
+    try {
+      const userStr = localStorage.getItem('lumo_user');
+      if (userStr) {
+        const parsed = JSON.parse(userStr);
+        if (parsed.full_name || parsed.name) return parsed.full_name || parsed.name;
+      }
+      const raw = localStorage.getItem('lumo_user_name');
+      if (raw && !raw.startsWith('user_') && !/\d/.test(raw)) return raw.trim();
+    } catch {}
+    return '';
+  });
+  const [organizerPhone, setOrganizerPhone] = useState(() => {
+    return localStorage.getItem('lumo_user_phone') || '';
+  });
   const [organizerCustomAmount, setOrganizerCustomAmount] = useState(0);
   const [items, setItems] = useState<LineItem[]>([{ name: '', price: 0, assignedTo: '' }]);
   const [serviceCharge, setServiceCharge] = useState(0);
@@ -330,16 +339,16 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 animate-fade-in space-y-6">
         {/* Top Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-5">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">What would you like to create?</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Choose what you're collecting or paying for. We'll guide you through the rest.</p>
+            <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl">What would you like to create?</h1>
+            <p className="mt-1 text-sm font-semibold text-slate-400">Choose what you're collecting or paying for. We'll guide you through the rest.</p>
           </div>
           <button
             onClick={() => { setCreationType('standard'); setDestinationType('reference'); setDestinationReference('99123456'); setStep(1); }}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 shadow-xs hover:border-slate-300 transition"
+            className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-[#0C1816] px-4 py-2.5 text-xs font-bold text-slate-300 shadow-sm hover:border-[#00E599]/50 hover:text-white transition"
           >
-            <QrCode className="h-4 w-4 text-primary-600" /> Scan QR
+            <QrCode className="h-4 w-4 text-[#00E599]" /> Scan QR
           </button>
         </div>
 
@@ -348,29 +357,29 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
           {/* HERO PRODUCT: Split a bill */}
           <div
             onClick={() => { setCreationType('standard'); setStep(1); }}
-            className="group cursor-pointer rounded-2xl border-2 border-primary-100 bg-gradient-to-r from-primary-900 to-slate-900 p-5 text-white shadow-sm hover:border-primary-400 transition"
+            className="group cursor-pointer rounded-3xl border border-[#0D382E] bg-gradient-to-br from-[#06241D] to-[#0A1815] p-6 text-white shadow-[0_0_30px_rgba(0,229,153,0.12)] hover:border-[#00E599]/60 hover:shadow-[0_0_35px_rgba(0,229,153,0.2)] transition-all"
           >
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-500 text-white shadow-md">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00E599] text-[#060D0E] font-black shadow-lg shadow-[#00E599]/25">
                   <ReceiptText className="h-6 w-6" />
                 </div>
                 <div>
-                  <span className="rounded-full bg-primary-400/20 px-2.5 py-0.5 text-[10px] font-bold text-primary-300 uppercase tracking-wider">Main Product</span>
-                  <h2 className="text-xl font-extrabold mt-0.5">Split a Bill</h2>
+                  <span className="rounded-full bg-[#00E599]/15 border border-[#00E599]/30 px-2.5 py-0.5 text-[10px] font-extrabold text-[#00E599] uppercase tracking-wider">Main Product</span>
+                  <h2 className="text-xl font-black mt-0.5 text-white">Split a Bill</h2>
                 </div>
               </div>
-              <ArrowRight className="h-5 w-5 text-white/50 group-hover:translate-x-1 group-hover:text-white transition" />
+              <ArrowRight className="h-5 w-5 text-slate-400 group-hover:translate-x-1 group-hover:text-[#00E599] transition" />
             </div>
-            <p className="mt-3 text-xs text-white/80 leading-relaxed">
+            <p className="mt-3 text-xs text-slate-300 leading-relaxed">
               Divide a restaurant, hotel, trip, rent, event, or group expense between people.
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-bold text-primary-200">
-              <span className="rounded-lg bg-white/10 px-2.5 py-1">Equal Share</span>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-bold text-[#00E599]">
+              <span className="rounded-xl bg-[#061814] border border-[#0D382E] px-2.5 py-1 text-slate-200">Equal Share</span>
               <span>•</span>
-              <span className="rounded-lg bg-white/10 px-2.5 py-1">Custom Share</span>
+              <span className="rounded-xl bg-[#061814] border border-[#0D382E] px-2.5 py-1 text-slate-200">Custom Share</span>
               <span>•</span>
-              <span className="rounded-lg bg-white/10 px-2.5 py-1">By Item Breakdown</span>
+              <span className="rounded-xl bg-[#061814] border border-[#0D382E] px-2.5 py-1 text-slate-200">By Item Breakdown</span>
             </div>
           </div>
 
@@ -379,68 +388,68 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
             {/* Pay Link */}
             <div
               onClick={() => { setCreationType('pay_link'); setStep(1); }}
-              className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-xs hover:border-amber-300 hover:shadow-md transition"
+              className="group cursor-pointer rounded-3xl border border-slate-800/80 bg-[#0C1816] p-5 shadow-sm hover:border-amber-400/50 hover:shadow-lg transition-all"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
                     <Zap className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">Pay Link</h3>
+                    <h3 className="text-sm font-extrabold text-white">Pay Link</h3>
                     <p className="text-[10px] text-slate-400">Quick Payments</p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:translate-x-0.5 group-hover:text-slate-600 transition" />
+                <ArrowRight className="h-4 w-4 text-slate-500 group-hover:translate-x-0.5 group-hover:text-amber-400 transition" />
               </div>
-              <p className="text-xs text-slate-500">Create one secure payment link for fixed or open amounts and share anywhere.</p>
+              <p className="text-xs text-slate-400">Create one secure payment link for fixed or open amounts and share anywhere.</p>
             </div>
 
             {/* Birthday */}
             <div
               onClick={() => { setCreationType('birthday'); setStep(1); }}
-              className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-xs hover:border-purple-300 hover:shadow-md transition"
+              className="group cursor-pointer rounded-3xl border border-slate-800/80 bg-[#0C1816] p-5 shadow-sm hover:border-purple-400/50 hover:shadow-lg transition-all"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600 font-bold">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 font-bold">
                     <Gift className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">Birthday Fund</h3>
+                    <h3 className="text-sm font-extrabold text-white">Birthday Fund</h3>
                     <p className="text-[10px] text-slate-400">Personal Celebration</p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:translate-x-0.5 group-hover:text-slate-600 transition" />
+                <ArrowRight className="h-4 w-4 text-slate-500 group-hover:translate-x-0.5 group-hover:text-purple-400 transition" />
               </div>
-              <p className="text-xs text-slate-500">Collect birthday contributions and messages in one private celebration page with secret reveal.</p>
+              <p className="text-xs text-slate-400">Collect birthday contributions and messages in one private celebration page with secret reveal.</p>
             </div>
           </div>
 
           {/* COMMUNITY PRODUCT: Michango */}
           <div
             onClick={() => { setCreationType('michango'); setStep(1); }}
-            className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-xs hover:border-success-300 hover:shadow-md transition"
+            className="group cursor-pointer rounded-3xl border border-slate-800/80 bg-[#0C1816] p-5 shadow-sm hover:border-[#00E599]/50 hover:shadow-lg transition-all"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-50 text-success-600 font-bold">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00E599]/15 border border-[#00E599]/30 text-[#00E599] font-bold">
                   <Users className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-success-700 uppercase tracking-wider">Community Campaign</span>
-                  <h3 className="text-sm font-extrabold text-slate-900">Michango Campaign</h3>
+                  <span className="text-[10px] font-bold text-[#00E599] uppercase tracking-wider">Community Campaign</span>
+                  <h3 className="text-sm font-extrabold text-white">Michango Campaign</h3>
                 </div>
               </div>
-              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:translate-x-0.5 group-hover:text-slate-600 transition" />
+              <ArrowRight className="h-4 w-4 text-slate-500 group-hover:translate-x-0.5 group-hover:text-[#00E599] transition" />
             </div>
-            <p className="mt-2 text-xs text-slate-500">Structured contributions with target goals, pledged vs paid progress, and closing dates for weddings, send-offs & community needs.</p>
+            <p className="mt-2 text-xs text-slate-400">Structured contributions with target goals, pledged vs paid progress, and closing dates for weddings, send-offs & community needs.</p>
           </div>
         </div>
 
         {/* Start Faster Templates */}
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+          <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 shadow-2xl">
             <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-slate-400">Start Faster (Category Templates)</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
               {[
@@ -456,10 +465,10 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
                   <button
                     key={item.id}
                     onClick={() => applyPresetTemplate(item.id, item.label)}
-                    className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-center transition hover:border-primary-300 hover:bg-primary-50/50"
+                    className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-[#060D0E] p-3 text-center transition hover:border-[#00E599]/50 hover:bg-[#081B17]"
                   >
-                    <IconComp className="h-4 w-4 text-slate-600" />
-                    <span className="text-xs font-bold text-slate-800">{item.label}</span>
+                    <IconComp className="h-4 w-4 text-[#00E599]" />
+                    <span className="text-xs font-bold text-slate-200">{item.label}</span>
                   </button>
                 );
               })}
@@ -468,7 +477,7 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
 
           {/* My Saved Templates */}
           {customTemplates.length > 0 && (
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+            <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-extrabold uppercase tracking-wider text-slate-400">My Saved Templates</p>
                 <span className="text-[10px] font-bold text-slate-400">{customTemplates.length} saved</span>
@@ -477,18 +486,18 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
                 {customTemplates.map((tpl) => (
                   <div
                     key={tpl.id}
-                    className="group relative flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 p-3 hover:border-primary-300 hover:bg-primary-50/40 transition"
+                    className="group relative flex items-center justify-between rounded-2xl border border-slate-800 bg-[#060D0E] p-3.5 hover:border-[#00E599]/50 hover:bg-[#081B17] transition"
                   >
                     <button
                       onClick={() => applyCustomTemplate(tpl)}
                       className="flex-1 text-left"
                     >
-                      <span className="block text-xs font-bold text-slate-900 group-hover:text-primary-700">{tpl.name}</span>
+                      <span className="block text-xs font-bold text-white group-hover:text-[#00E599]">{tpl.name}</span>
                       <span className="text-[10px] text-slate-400">{tpl.defaultAmount ? `${formatMoney(Number(tpl.defaultAmount))} · ` : ''}{tpl.splitMode.replace('_', ' ')}</span>
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteCustomTemplate(tpl.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-error-500 transition"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-400 transition"
                       title="Delete template"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -508,33 +517,33 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in space-y-6">
       {/* Back to Create menu top bar */}
       {/* Top Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-slate-100/80 pb-4">
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
         <button
           onClick={() => { setStep(0); setActiveTemplateName(null); setError(''); }}
-          className="group flex items-center gap-2 rounded-xl bg-slate-100/70 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 transition"
+          className="group flex items-center gap-2 rounded-2xl border border-slate-800 bg-[#0C1816] px-3.5 py-2 text-xs font-bold text-slate-300 hover:border-slate-700 hover:text-white transition"
         >
           <ArrowLeft className="h-3.5 w-3.5 transition group-hover:-translate-x-0.5" /> Back to Create menu
         </button>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-extrabold text-slate-700 tracking-wide">
+        <span className="rounded-full border border-[#0D382E] bg-[#081B17] px-3.5 py-1 text-[11px] font-extrabold text-[#00E599] tracking-wide">
           {activeTemplateName ? activeTemplateName : creationType === 'standard' ? 'Split a Bill' : creationType === 'pay_link' ? 'Pay Link' : creationType === 'birthday' ? 'Birthday Fund' : 'Michango Campaign'}
         </span>
       </div>
 
       {/* Active Template Banner */}
       {activeTemplateName && (
-        <div className="flex items-center justify-between rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-primary-50/40 px-4 py-3 text-xs shadow-xs animate-slide-up">
-          <div className="flex items-center gap-2.5 text-slate-900 font-bold">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-600">
-              <Zap className="h-4 w-4 fill-amber-500" />
+        <div className="flex items-center justify-between rounded-2xl border border-[#0D382E] bg-[#081B17] px-4 py-3 text-xs shadow-lg animate-slide-up">
+          <div className="flex items-center gap-2.5 text-white font-bold">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00E599]/20 text-[#00E599]">
+              <Zap className="h-4 w-4 fill-[#00E599]" />
             </div>
             <div>
-              <span className="text-slate-500 font-semibold text-[11px] block">Active Template</span>
-              <span className="font-extrabold text-amber-950 text-xs">{activeTemplateName}</span>
+              <span className="text-slate-400 font-semibold text-[11px] block">Active Template</span>
+              <span className="font-extrabold text-[#00E599] text-xs">{activeTemplateName}</span>
             </div>
           </div>
           <button
             onClick={() => setActiveTemplateName(null)}
-            className="rounded-lg border border-amber-200 bg-white px-3 py-1 text-[11px] font-extrabold text-amber-800 hover:bg-amber-100/50 transition shadow-xs"
+            className="rounded-lg border border-[#0D382E] bg-[#060D0E] px-3 py-1 text-[11px] font-extrabold text-slate-300 hover:text-white transition"
           >
             Clear Template
           </button>
@@ -687,7 +696,7 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
       {creationType === 'standard' && (
         <>
           {/* Stepper Wizard Progress */}
-          <div className="mb-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-3 shadow-xs">
+          <div className="mb-6 rounded-2xl border border-slate-800/80 bg-[#0C1816] p-3.5 shadow-xl">
             <div className="flex items-center justify-between overflow-x-auto pb-1 scrollbar-none">
               {stepLabels.map((label, index) => {
                 const number = index + 1;
@@ -698,18 +707,18 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
                   <div key={label} className={`flex min-w-max items-center gap-2 ${visible ? '' : 'opacity-30'}`}>
                     <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black transition-all ${
                       isCurrent
-                        ? 'bg-primary-600 text-white shadow-md shadow-primary-500/25 ring-4 ring-primary-100'
+                        ? 'bg-[#00E599] text-[#060D0E] shadow-md shadow-[#00E599]/25 ring-4 ring-[#00E599]/20'
                         : isPassed
-                        ? 'bg-success-500 text-white'
-                        : 'bg-slate-200 text-slate-500'
+                        ? 'bg-[#0D382E] text-[#00E599] border border-[#00E599]/40'
+                        : 'bg-slate-800 text-slate-500'
                     }`}>
                       {isPassed ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : number}
                     </div>
-                    <span className={`text-xs font-extrabold ${isCurrent ? 'text-slate-950' : isPassed ? 'text-slate-700' : 'text-slate-400'}`}>
+                    <span className={`text-xs font-extrabold ${isCurrent ? 'text-white' : isPassed ? 'text-slate-300' : 'text-slate-500'}`}>
                       {label}
                     </span>
                     {number < 7 && (
-                      <div className={`mx-2 h-1 w-6 rounded-full sm:w-10 transition-all ${isPassed ? 'bg-success-400' : 'bg-slate-200/80'}`} />
+                      <div className={`mx-2 h-1 w-6 rounded-full sm:w-10 transition-all ${isPassed ? 'bg-[#00E599]' : 'bg-slate-800'}`} />
                     )}
                   </div>
                 );
@@ -726,17 +735,17 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
           {step === 7 && <PreviewStep title={title} totalNum={totalNum} selectedDestinationName={selectedDestinationName} selectedMerchant={selectedMerchant} splitMode={splitMode} peopleCount={peopleCount} equalAmounts={equalAmounts} customRemaining={customRemaining} customAllocated={customAllocated} feePayer={feePayer} allowCash={allowCash} note={note} calculatedItemTotal={calculatedItemTotal} onCreate={handleCreate} creating={creating} onSaveAsTemplate={saveCurrentAsTemplate} />}
 
           {step < 7 && (
-            <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+            <div className="mt-6 flex items-center justify-between border-t border-slate-800/80 pt-4">
               <button
                 onClick={step === 1 ? () => setStep(0) : previousStep}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-2xs"
+                className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:border-slate-700 transition"
               >
                 {step === 1 ? 'Cancel' : <><ArrowLeft className="h-4 w-4" /> Back</>}
               </button>
               {step !== 7 && (
                 <button
                   onClick={nextStep}
-                  className="flex items-center gap-2 rounded-xl bg-primary-600 px-6 py-2.5 text-xs font-extrabold text-white transition hover:bg-primary-700 shadow-md shadow-primary-600/20"
+                  className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] px-6 py-2.5 text-xs font-black text-[#060D0E] transition hover:brightness-110 active:scale-95 shadow-[0_0_20px_rgba(0,229,153,0.25)]"
                 >
                   Continue <ArrowRight className="h-4 w-4" />
                 </button>
@@ -746,12 +755,12 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
         </>
       )}
 
-      {error && <p className="mt-4 rounded-xl border border-error-100 bg-error-50 px-4 py-3 text-sm font-semibold text-error-700">{error}</p>}
+      {error && <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-xs font-bold text-red-400">{error}</p>}
     </div>
   );
 }
 
-function Panel({ children }: { children: React.ReactNode }) { return <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 animate-slide-up">{children}</div>; }
+function Panel({ children }: { children: React.ReactNode }) { return <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 shadow-2xl sm:p-8 animate-slide-up text-white">{children}</div>; }
 
 function QrScannerModal({
   isOpen,

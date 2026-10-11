@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanLine, ArrowRight, ShieldCheck, AlertCircle, Building2, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { ScanLine, ArrowRight, ShieldCheck, AlertCircle, Building2, ArrowLeft } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 
 type ControlNumberViewProps = {
@@ -25,7 +25,7 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
     setResult(null);
 
     if (!controlNum.trim()) {
-      setError('Please enter a Control Number or Lipa Namba');
+      setError('Tafadhali weka Control Number au Lipa Namba');
       return;
     }
 
@@ -36,7 +36,6 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
       if (MOCK_CONTROL_NUMBERS[trimmed]) {
         setResult(MOCK_CONTROL_NUMBERS[trimmed]);
       } else {
-        // Fallback mock result for any 8-digit number
         if (/^\d{6,12}$/.test(trimmed)) {
           setResult({
             biller: `Verified Merchant (#${trimmed.slice(-4)})`,
@@ -45,7 +44,7 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
             provider: 'Interbank Lipa Namba'
           });
         } else {
-          setError('Control Number or Lipa Namba not found or expired. Try "99123456" or "15024928".');
+          setError('Control Number au Lipa Namba haijapatikana. Jaribu mfano "99123456" au "15024928".');
         }
       }
     }, 600);
@@ -55,40 +54,40 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
     <div className="mx-auto max-w-2xl px-4 py-8 animate-fade-in">
       <button
         onClick={onBack}
-        className="mb-4 flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
+        className="mb-4 flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft className="h-4 w-4" /> Back to Dashboard
       </button>
 
-      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
+      <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 sm:p-8 shadow-2xl backdrop-blur-xl space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#09221C] border border-[#00E599]/30 text-[#00E599] shadow-[0_0_15px_rgba(0,229,153,0.15)]">
             <ScanLine className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900">Control Number & Lipa Namba Verification</h1>
-            <p className="text-xs text-slate-500">Lookup official biller details and split directly with friends.</p>
+            <h1 className="text-xl font-black tracking-tight text-white">Control Number & Lipa Namba</h1>
+            <p className="text-xs text-slate-400">Lookup official biller details and split directly with friends.</p>
           </div>
         </div>
 
         {/* Form input */}
         <div className="space-y-3">
-          <label className="text-xs font-bold text-slate-700">Enter Lipa Namba or Government Control Number</label>
-          <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-300">Enter Lipa Namba or Government Control Number</label>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <div className="relative flex-1">
-              <ScanLine className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <ScanLine className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={controlNum}
                 onChange={(e) => setControlNum(e.target.value)}
                 placeholder="e.g. 99123456 or 15024928"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-10 pr-4 font-mono text-sm font-bold text-slate-900 outline-none focus:border-primary-500 focus:bg-white"
+                className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] py-3.5 pl-10 pr-4 font-mono text-sm font-bold text-white placeholder-slate-600 outline-none focus:border-[#00E599] focus:ring-1 focus:ring-[#00E599]/30 transition"
               />
             </div>
             <button
               onClick={handleLookup}
               disabled={searching}
-              className="rounded-xl bg-primary-600 px-5 py-3 text-xs font-bold text-white hover:bg-primary-700 transition disabled:opacity-50"
+              className="rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] px-6 py-3.5 text-xs font-black text-[#060D0E] shadow-[0_0_20px_rgba(0,229,153,0.25)] hover:brightness-110 active:scale-95 transition disabled:opacity-50"
             >
               {searching ? 'Verifying...' : 'Lookup Bill'}
             </button>
@@ -96,36 +95,36 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
         </div>
 
         {error && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-error-100 bg-error-50 p-4 text-xs font-semibold text-error-700">
-            <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="flex items-start gap-2.5 rounded-2xl border border-red-900/50 bg-red-950/20 p-4 text-xs font-semibold text-red-400">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
             <p>{error}</p>
           </div>
         )}
 
         {/* Verification Result Card */}
         {result && (
-          <div className="rounded-2xl border border-primary-200 bg-primary-50/30 p-5 space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between border-b border-primary-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary-600" />
+          <div className="rounded-2xl border border-[#0D382E] bg-[#081B17] p-5 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Building2 className="h-5 w-5 text-[#00E599]" />
                 <div>
-                  <p className="text-sm font-extrabold text-slate-900">{result.biller}</p>
-                  <p className="text-[11px] text-slate-500">{result.provider} · Verified PSP Confirmation</p>
+                  <p className="text-sm font-extrabold text-white">{result.biller}</p>
+                  <p className="text-[11px] text-slate-400">{result.provider} · Verified PSP Confirmation</p>
                 </div>
               </div>
-              <span className="flex items-center gap-1 rounded-full bg-success-100 px-2.5 py-0.5 text-[10px] font-bold text-success-700">
+              <span className="flex items-center gap-1 rounded-full bg-[#00E599]/15 border border-[#00E599]/30 px-2.5 py-0.5 text-[10px] font-extrabold text-[#00E599]">
                 <ShieldCheck className="h-3.5 w-3.5" /> VERIFIED
               </span>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <p className="text-xs text-slate-500">{result.description}</p>
-                <p className="text-xl font-extrabold text-slate-900">{formatMoney(result.amount)}</p>
+                <p className="text-xs text-slate-400">{result.description}</p>
+                <p className="text-xl font-black text-white">{formatMoney(result.amount)}</p>
               </div>
               <button
                 onClick={() => onSplitBill(result.biller, result.amount, controlNum)}
-                className="flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-xs font-bold text-white shadow-sm hover:bg-primary-700 transition"
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#00E599] px-5 py-3 text-xs font-black text-[#060D0E] shadow-sm hover:brightness-110 transition active:scale-95"
               >
                 Split This Bill <ArrowRight className="h-4 w-4" />
               </button>
@@ -133,8 +132,8 @@ export default function ControlNumberView({ onSplitBill, onBack }: ControlNumber
           </div>
         )}
 
-        <div className="rounded-xl bg-slate-50 p-4 text-[11px] text-slate-500 leading-relaxed">
-          <p className="font-bold text-slate-700 mb-1">PSP Confirmation Notice</p>
+        <div className="rounded-2xl bg-[#071311] border border-slate-800/60 p-4 text-[11px] text-slate-400 leading-relaxed">
+          <p className="font-bold text-slate-300 mb-1">PSP Confirmation Notice</p>
           Control number validation depends on payment service provider (PSP) API support. Real-time bill verification guarantees that the recipient name and amount match before funds are released.
         </div>
       </div>

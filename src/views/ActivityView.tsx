@@ -108,34 +108,38 @@ Thank you for using LUMO Split!
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 animate-fade-in">
+    <div className="mx-auto max-w-5xl px-4 py-8 animate-fade-in text-white">
       {/* Top Bar */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <button
             onClick={onBack}
-            className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
+            className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition"
           >
             <ArrowLeft className="h-4 w-4" /> Dashboard
           </button>
-          <h1 className="text-2xl font-extrabold text-slate-900">Activity & Transaction History</h1>
-          <p className="text-xs text-slate-500">Track all split bills, payment attempts, and cash entries in real-time.</p>
+          <h1 className="text-2xl font-black tracking-tight text-white">Activity & Transactions</h1>
+          <p className="text-xs text-slate-400">Track all split bills, payment attempts, and cash entries in real-time.</p>
         </div>
 
         {/* Tab switch */}
-        <div className="flex rounded-xl bg-slate-100 p-1">
+        <div className="flex rounded-2xl bg-[#0C1816] border border-slate-800/80 p-1.5 shadow-xl">
           <button
             onClick={() => setActiveTab('splits')}
-            className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
-              activeTab === 'splits' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${
+              activeTab === 'splits'
+                ? 'bg-[#0D382E] text-[#00E599] border border-[#00E599]/40 shadow-[0_0_15px_rgba(0,229,153,0.15)]'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             Split Bills ({splits.length})
           </button>
           <button
             onClick={() => setActiveTab('payments')}
-            className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
-              activeTab === 'payments' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${
+              activeTab === 'payments'
+                ? 'bg-[#0D382E] text-[#00E599] border border-[#00E599]/40 shadow-[0_0_15px_rgba(0,229,153,0.15)]'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             Payment Attempts ({payments.length})
@@ -144,17 +148,17 @@ Thank you for using LUMO Split!
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="mb-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <div className="mb-6 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-4 sm:p-5 shadow-2xl">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title, ref code, provider or name..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-500/20"
+              className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 pl-10 pr-4 text-xs font-medium text-white placeholder-slate-600 outline-none focus:border-[#00E599] focus:ring-1 focus:ring-[#00E599]/30"
             />
           </div>
 
@@ -164,10 +168,10 @@ Thank you for using LUMO Split!
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                className={`rounded-xl px-3 py-1.5 text-[11px] font-black transition ${
                   activeFilter === filter
-                    ? 'bg-primary-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-[#00E599] text-[#060D0E] shadow-[0_0_12px_rgba(0,229,153,0.25)]'
+                    : 'bg-[#060D0E] border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                 }`}
               >
                 {filter}
@@ -181,37 +185,37 @@ Thank you for using LUMO Split!
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-20 w-full rounded-2xl shimmer" />
+            <div key={i} className="h-20 w-full rounded-3xl bg-[#0C1816] border border-slate-800/80 animate-pulse" />
           ))}
         </div>
       ) : activeTab === 'splits' ? (
         <div className="space-y-3">
           {filteredSplits.length === 0 ? (
-            <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center">
-              <Receipt className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">No split bills found</p>
-              <p className="mt-1 text-xs text-slate-400">Try adjusting your search or filter options.</p>
+            <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-12 text-center shadow-2xl">
+              <Receipt className="mx-auto mb-3 h-10 w-10 text-slate-600" />
+              <p className="text-sm font-bold text-slate-300">No split bills found</p>
+              <p className="mt-1 text-xs text-slate-500">Try adjusting your search or filter options.</p>
             </div>
           ) : (
             filteredSplits.map((s) => (
               <div
                 key={s.id}
                 onClick={() => onSelectSplit(s)}
-                className="group flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 transition hover:border-slate-200 hover:shadow-md cursor-pointer sm:flex-row sm:items-center sm:justify-between"
+                className="group flex flex-col gap-3 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-5 transition hover:border-[#00E599]/40 hover:shadow-[0_0_20px_rgba(0,229,153,0.08)] cursor-pointer sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-bold text-slate-700">
-                    <Receipt className="h-5 w-5 text-slate-600" />
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#081B17] border border-[#0D382E] font-bold text-[#00E599]">
+                    <Receipt className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-extrabold text-slate-900 group-hover:text-primary-600 transition">
+                      <h3 className="font-extrabold text-white group-hover:text-[#00E599] transition">
                         {s.title}
                       </h3>
                       <StatusBadge status={s.status} />
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                      <span>Ref: <strong className="font-mono text-slate-700">{s.ref_code}</strong></span>
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                      <span>Ref: <strong className="font-mono text-white">{s.ref_code}</strong></span>
                       <span>•</span>
                       <span className="flex items-center gap-1"><User className="h-3 w-3" /> {s.organizer_name}</span>
                       <span>•</span>
@@ -222,10 +226,10 @@ Thank you for using LUMO Split!
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end sm:gap-6 border-t border-slate-50 pt-3 sm:border-t-0 sm:pt-0">
+                <div className="flex items-center justify-between sm:justify-end sm:gap-6 border-t border-slate-800/80 pt-3 sm:border-t-0 sm:pt-0">
                   <div className="text-left sm:text-right">
-                    <p className="text-sm font-extrabold text-slate-900">{formatMoney(s.total_amount)}</p>
-                    <p className="text-[11px] font-semibold text-success-600">
+                    <p className="text-sm font-black text-white">{formatMoney(s.total_amount)}</p>
+                    <p className="text-[11px] font-extrabold text-[#00E599]">
                       {formatMoney(s.amount_paid)} collected ({s.settlement_percent}%)
                     </p>
                   </div>
@@ -236,7 +240,7 @@ Thank you for using LUMO Split!
                         e.stopPropagation();
                         downloadReceipt(s);
                       }}
-                      className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition"
+                      className="rounded-xl border border-slate-800 bg-[#060D0E] p-2 text-slate-400 hover:text-white hover:border-[#00E599]/40 transition"
                       title="Download Receipt"
                     >
                       <Download className="h-4 w-4" />
@@ -246,7 +250,7 @@ Thank you for using LUMO Split!
                         e.stopPropagation();
                         shareSplit(s);
                       }}
-                      className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition"
+                      className="rounded-xl border border-slate-800 bg-[#060D0E] p-2 text-slate-400 hover:text-white hover:border-[#00E599]/40 transition"
                       title="Share Split"
                     >
                       <Share2 className="h-4 w-4" />
@@ -261,35 +265,37 @@ Thank you for using LUMO Split!
         /* Payments Tab */
         <div className="space-y-3">
           {filteredPayments.length === 0 ? (
-            <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center">
-              <Banknote className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">No payment attempts found</p>
+            <div className="rounded-3xl border border-slate-800/80 bg-[#0C1816] p-12 text-center shadow-2xl">
+              <Banknote className="mx-auto mb-3 h-10 w-10 text-slate-600" />
+              <p className="text-sm font-bold text-slate-300">No payment attempts found</p>
             </div>
           ) : (
             filteredPayments.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-2xs"
+                className="flex items-center justify-between rounded-2xl border border-slate-800/80 bg-[#0C1816] p-4 shadow-xl"
               >
                 <div className="flex items-center gap-3">
                   <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                    p.status === 'SUCCESS' ? 'bg-success-100 text-success-700' : 'bg-amber-100 text-amber-700'
+                    p.status === 'SUCCESS'
+                      ? 'bg-[#081B17] text-[#00E599] border border-[#0D382E]'
+                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                   }`}>
                     {p.status === 'SUCCESS' ? <CheckCircle2 className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
                   </div>
                   <div>
-                    <p className="text-xs font-extrabold text-slate-900">
+                    <p className="text-xs font-extrabold text-white">
                       {p.provider} Transaction ({p.status})
                     </p>
-                    <p className="text-[11px] text-slate-500 font-mono">
+                    <p className="text-[11px] text-slate-400 font-mono">
                       Ref: {p.provider_tx_ref || 'Pending'}
                     </p>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-sm font-extrabold text-slate-900">{formatMoney(p.amount)}</p>
-                  <p className="text-[11px] text-slate-400">{timeAgo(p.requested_at)}</p>
+                  <p className="text-sm font-black text-white">{formatMoney(p.amount)}</p>
+                  <p className="text-[11px] text-slate-500">{timeAgo(p.requested_at)}</p>
                 </div>
               </div>
             ))
@@ -298,7 +304,7 @@ Thank you for using LUMO Split!
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-xs font-bold text-white shadow-xl animate-slide-up">
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-[#081B17] border border-[#00E599]/40 px-5 py-3 text-xs font-bold text-[#00E599] shadow-2xl animate-slide-up">
           {toast}
         </div>
       )}

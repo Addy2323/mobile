@@ -14,7 +14,7 @@ type HeaderProps = {
 };
 
 export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
-  const [userName, setUserName] = useState<string>('Ado Myamba');
+  const [userName, setUserName] = useState<string>('');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -93,16 +93,16 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
               className="flex items-center space-x-3 p-1.5 pr-2.5 rounded-full hover:bg-slate-800/60 active:scale-95 transition-all text-left"
             >
               {/* Circular Avatar */}
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 p-[1.5px] shadow-sm shrink-0">
-                <div className="w-full h-full rounded-full bg-slate-900 overflow-hidden flex items-center justify-center text-xs font-bold text-amber-200">
-                  {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AM'}
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#00E599] to-[#0D382E] p-[1.5px] shadow-sm shrink-0">
+                <div className="w-full h-full rounded-full bg-[#061814] overflow-hidden flex items-center justify-center text-xs font-bold text-[#00E599]">
+                  {userName ? userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'LM'}
                 </div>
               </div>
 
               {/* Name & Dropdown Chevron */}
               <div className="flex items-center space-x-1.5">
                 <span className="text-sm font-semibold text-slate-100 hidden md:inline-block">
-                  {userName}
+                  {userName || 'Member'}
                 </span>
                 <ChevronDown className="w-4 h-4 text-slate-400 stroke-[2.5]" />
               </div>
@@ -112,8 +112,8 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
             {userDropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-[#0C1518] border border-slate-800 rounded-2xl shadow-2xl py-2 z-50 text-xs">
                 <div className="px-4 py-2 border-b border-slate-800/80">
-                  <p className="font-bold text-white truncate">{userName}</p>
-                  <p className="text-[11px] text-slate-400">Verified Member</p>
+                  <p className="font-bold text-white truncate">{userName || 'Member'}</p>
+                  <p className="text-[11px] text-[#00E599]">Verified Account</p>
                 </div>
                 <button
                   onClick={() => {
@@ -128,8 +128,13 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
                 <button
                   onClick={() => {
                     setUserDropdownOpen(false);
-                    localStorage.removeItem('lumo_user_token');
+                    sessionStorage.removeItem('lumo_authenticated');
                     localStorage.removeItem('lumo_authenticated');
+                    localStorage.removeItem('lumo_user_token');
+                    localStorage.removeItem('lumo_user_phone');
+                    localStorage.removeItem('lumo_user');
+                    localStorage.removeItem('lumo_user_name');
+                    window.dispatchEvent(new Event('lumo-auth-changed'));
                     window.location.reload();
                   }}
                   className="w-full text-left px-4 py-2.5 hover:bg-red-950/30 text-red-400 flex items-center space-x-2"

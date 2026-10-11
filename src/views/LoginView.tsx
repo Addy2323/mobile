@@ -87,7 +87,7 @@ export default function LoginView({
   const [onboardingPhone, setOnboardingPhone] = useState('');
 
   // State for Forgot Passcode
-  const [forgotPhone, setForgotPhone] = useState(storedPhone);
+  const [forgotPhone, setForgotPhone] = useState('');
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmNewPasscode, setConfirmNewPasscode] = useState('');
@@ -225,6 +225,7 @@ export default function LoginView({
         throw new Error(data.error || 'Invalid passcode');
       }
 
+      sessionStorage.setItem('lumo_authenticated', 'true');
       localStorage.setItem('lumo_authenticated', 'true');
       localStorage.setItem('lumo_onboarded', 'true');
       localStorage.setItem('lumo_user_name', data.user.name);
@@ -255,7 +256,7 @@ export default function LoginView({
     e.preventDefault();
     const cleanPhone = normalizeTzPhone(forgotPhone);
     if (!cleanPhone || cleanPhone.length < 12) {
-      setError('Please enter a valid phone number');
+      setError('Tafadhali weka namba sahihi ya simu (mfano 712 345 678)');
       return;
     }
 
@@ -263,6 +264,23 @@ export default function LoginView({
     setError('');
 
     try {
+      // 1. Verify phone is registered in system first
+      const checkRes = await fetch('/api/auth/check-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone })
+      });
+      const checkData = await checkRes.json();
+      if (!checkData.registered) {
+        setError('Namba hii haijasajiliwa kwenye LUMO. Tafadhali fungua akaunti kwanza.');
+        setTimeout(() => {
+          setOnboardingPhone(cleanPhone);
+          switchMode('onboarding');
+        }, 1800);
+        return;
+      }
+
+      // 2. Only registered users receive reset OTP
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

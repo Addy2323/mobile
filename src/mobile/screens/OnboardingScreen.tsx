@@ -210,6 +210,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
 
+      sessionStorage.setItem('lumo_authenticated', 'true');
       localStorage.setItem('lumo_authenticated', 'true');
       localStorage.setItem('lumo_onboarded', 'true');
       localStorage.setItem('lumo_user_name', data.user?.name || name);

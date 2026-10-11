@@ -36,7 +36,7 @@ export default function App() {
 
   const publicToken = getPublicToken();
   const [authenticated, setAuthenticated] = useState(() => {
-    const isAuth = localStorage.getItem('lumo_authenticated') === 'true';
+    const isAuth = sessionStorage.getItem('lumo_authenticated') === 'true';
     const phone = localStorage.getItem('lumo_user_phone');
     return isAuth && Boolean(phone);
   });
@@ -49,7 +49,7 @@ export default function App() {
   // Sync auth state when storage or events change
   useEffect(() => {
     const syncAuth = () => {
-      const isAuth = localStorage.getItem('lumo_authenticated') === 'true';
+      const isAuth = sessionStorage.getItem('lumo_authenticated') === 'true';
       const phone = localStorage.getItem('lumo_user_phone');
       setAuthenticated(isAuth && Boolean(phone));
     };

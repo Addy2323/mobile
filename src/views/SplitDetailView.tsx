@@ -119,83 +119,58 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
     await supabase.from('split_participants').update({
       status: 'PAID', amount_paid: participant.allocation_amount, paid_at: now, payment_ref: txRef,
     }).eq('id', participant.id);
-    await recalculateSplit();
-    await supabase.from('audit_logs').insert({
-      actor: split.organizer_name, action: 'MARKED_PAID_CASH', entity_type: 'participant', entity_id: participant.id,
-      metadata: { amount: participant.allocation_amount, tx_ref: txRef, split_ref: split.ref_code },
-    });
-    setMenuOpenFor(null);
-    showToast(`${participant.name} marked as paid in cash`);
-    void loadData();
-  }
 
-  async function recalculateSplit() {
-    const { data: allP } = await supabase.from('split_participants').select('amount_paid, allocation_amount, status').eq('split_id', split.id);
-    const totalPaid = (allP || []).reduce((s: number, p: { amount_paid: number }) => s + (p.amount_paid || 0), 0);
-    const percent = Math.round((totalPaid / split.total_amount) * 100);
-    const newStatus = percent === 100 ? 'SETTLED' : 'PARTIALLY_PAID';
-    await supabase.from('splits').update({ amount_paid: totalPaid, settlement_percent: percent, status: newStatus }).eq('id', split.id);
-    setSplit((prev) => ({ ...prev, amount_paid: totalPaid, settlement_percent: percent, status: newStatus }));
+    const newAmountPaid = split.amount_paid + participant.allocation_amount;
+    const newPercent = Math.round((newAmountPaid / split.total_amount) * 100);
+    const newStatus = newPercent >= 100 ? 'SETTLED' : 'PARTIALLY_PAID';
+    await supabase.from('splits').update({
+      amount_paid: newAmountPaid, settlement_percent: Math.min(newPercent, 100), status: newStatus,
+    }).eq('id', split.id);
+
+    showToast(`Marked ${participant.name} as paid in cash`);
+    void loadData();
   }
 
   async function handleEditAmount(participant: Participant, newAmount: number) {
     await supabase.from('split_participants').update({ allocation_amount: newAmount }).eq('id', participant.id);
-    await supabase.from('audit_logs').insert({
-      actor: split.organizer_name, action: 'AMOUNT_EDITED', entity_type: 'participant', entity_id: participant.id,
-      metadata: { old: participant.allocation_amount, new: newAmount, split_ref: split.ref_code },
-    });
     setActionModal(null);
-    showToast(`${participant.name}'s share updated`);
+    showToast(`Updated ${participant.name}'s share to ${formatMoney(newAmount)}`);
     void loadData();
   }
 
   async function handleAddPerson(name: string, phone: string, amount: number) {
     await supabase.from('split_participants').insert({
-      split_id: split.id, name, phone: phone || null, allocation_amount: amount, amount_paid: 0, status: 'PENDING', is_organizer: false,
+      split_id: split.id, name, phone, allocation_amount: amount, status: 'PENDING', is_organizer: false,
     });
     const newCount = split.participant_count + 1;
     await supabase.from('splits').update({ participant_count: newCount }).eq('id', split.id);
-    await supabase.from('audit_logs').insert({
-      actor: split.organizer_name, action: 'PERSON_ADDED', entity_type: 'split', entity_id: split.id,
-      metadata: { name, phone, amount, split_ref: split.ref_code },
-    });
     setActionModal(null);
-    showToast(`${name} added`);
+    showToast(`Added ${name} to split`);
     void loadData();
   }
 
   async function handleRemovePerson(participant: Participant) {
     await supabase.from('split_participants').delete().eq('id', participant.id);
-    const newCount = Math.max(0, split.participant_count - 1);
+    const newCount = Math.max(1, split.participant_count - 1);
     await supabase.from('splits').update({ participant_count: newCount }).eq('id', split.id);
-    await supabase.from('audit_logs').insert({
-      actor: split.organizer_name, action: 'PERSON_REMOVED', entity_type: 'split', entity_id: split.id,
-      metadata: { name: participant.name, split_ref: split.ref_code },
-    });
-    setMenuOpenFor(null);
-    setActionModal(null);
-    showToast(`${participant.name} removed`);
+    showToast(`Removed ${participant.name}`);
     void loadData();
   }
 
   async function handleCancelSplit() {
     await supabase.from('splits').update({ status: 'CANCELLED' }).eq('id', split.id);
-    await supabase.from('audit_logs').insert({
-      actor: split.organizer_name, action: 'SPLIT_CANCELLED', entity_type: 'split', entity_id: split.id,
-      metadata: { split_ref: split.ref_code, refund_note: 'Refunds depend on provider. Participants should contact their payment provider.' },
-    });
     setActionModal(null);
     showToast('Split cancelled');
     void loadData();
   }
 
-  function handleReportProblem(description: string) {
-    void supabase.from('audit_logs').insert({
+  async function handleReportProblem(description: string) {
+    await supabase.from('audit_logs').insert({
       actor: split.organizer_name, action: 'PROBLEM_REPORTED', entity_type: 'split', entity_id: split.id,
       metadata: { description, split_ref: split.ref_code },
     });
     setActionModal(null);
-    showToast('Problem reported. Support will contact you.');
+    showToast('Problem reported. Our support team will review it.');
   }
 
   function handleDownloadReceipt() {
@@ -235,54 +210,70 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
   const isCancelled = split.status === 'CANCELLED';
 
   if (loading) {
-    return <div className="mx-auto max-w-4xl px-4 py-8"><div className="h-64 rounded-2xl shimmer" /></div>;
+    return <div className="mx-auto max-w-4xl px-4 py-8"><div className="h-64 rounded-3xl bg-[#0C1816] border border-slate-800 animate-pulse" /></div>;
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">
-      <button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+    <div className="mx-auto max-w-4xl px-4 py-8 animate-fade-in text-white">
+      <button onClick={onBack} className="mb-5 flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition">
         <ArrowLeft className="h-4 w-4" /> All Splits
       </button>
 
       {/* Split header */}
-      <div className="mb-5 rounded-2xl border border-slate-100 bg-white p-6">
-        <div className="mb-5 flex items-start justify-between">
+      <div className="mb-6 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 sm:p-7 shadow-2xl">
+        <div className="mb-6 flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
-              <CategoryIcon category={split.category} className="h-7 w-7 text-slate-600" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#081B17] border border-[#0D382E] text-[#00E599]">
+              <CategoryIcon category={split.category} className="h-7 w-7 text-[#00E599]" />
             </div>
             <div>
-              <h1 className="text-xl font-extrabold text-slate-900">{split.title}</h1>
+              <h1 className="text-xl font-black text-white">{split.title}</h1>
               <div className="mt-1 flex items-center gap-3">
-                <span className="text-xs text-slate-400">Ref: {split.ref_code}</span>
+                <span className="text-xs text-slate-400 font-mono">Ref: {split.ref_code}</span>
                 <StatusBadge status={split.status} />
               </div>
             </div>
           </div>
           <div className="flex gap-2">
-            {!isCancelled && <button onClick={() => setShowShare(true)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><Share2 className="h-4 w-4" /></button>}
-            {isSettled && <button onClick={() => setActionModal({ kind: 'receipt' })} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><Download className="h-4 w-4" /></button>}
+            {!isCancelled && (
+              <button
+                onClick={() => setShowShare(true)}
+                className="rounded-xl border border-slate-800 bg-[#060D0E] p-2.5 text-slate-400 hover:text-white hover:border-[#00E599]/40 transition"
+                title="Share Split"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+            )}
+            {isSettled && (
+              <button
+                onClick={() => setActionModal({ kind: 'receipt' })}
+                className="rounded-xl border border-slate-800 bg-[#060D0E] p-2.5 text-slate-400 hover:text-white hover:border-[#00E599]/40 transition"
+                title="Download Receipt"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Settled banner */}
         {isSettled && (
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-success-200 bg-gradient-to-r from-success-50 via-success-100/40 to-white p-5 sm:flex-row sm:items-center sm:justify-between shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success-500 text-white shadow-md">
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-[#0D382E] bg-gradient-to-r from-[#081B17] via-[#0C1816] to-[#081B17] p-5 sm:flex-row sm:items-center sm:justify-between shadow-xl">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00E599] text-[#060D0E] shadow-[0_0_15px_rgba(0,229,153,0.3)]">
                 <PartyPopper className="h-6 w-6" />
               </div>
               <div>
-                <p className="flex items-center gap-1.5 text-base font-extrabold text-success-900"><Sparkles className="h-4 w-4 text-success-600 shrink-0" /> SPLIT SETTLED 100%</p>
-                <p className="text-xs font-semibold text-success-700">All {participants.length} participants have paid! {formatMoney(split.total_amount)} collected successfully.</p>
+                <p className="flex items-center gap-1.5 text-sm font-black text-[#00E599]"><Sparkles className="h-4 w-4 text-[#00E599] shrink-0" /> SPLIT SETTLED 100%</p>
+                <p className="text-xs font-semibold text-slate-300">All {participants.length} participants have paid! {formatMoney(split.total_amount)} collected successfully.</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 border-t border-success-200/60 pt-3 sm:border-t-0 sm:pt-0">
-              <button onClick={() => setActionModal({ kind: 'thankyou' })} className="flex items-center gap-1.5 rounded-xl bg-white border border-success-300 px-3 py-2 text-xs font-bold text-success-800 hover:bg-success-50 transition">
-                <Heart className="h-3.5 w-3.5 text-success-600" /> Send Thank-You
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3 sm:border-t-0 sm:pt-0">
+              <button onClick={() => setActionModal({ kind: 'thankyou' })} className="flex items-center gap-1.5 rounded-xl bg-[#060D0E] border border-slate-800 px-3.5 py-2 text-xs font-bold text-slate-300 hover:text-white hover:border-[#00E599]/40 transition">
+                <Heart className="h-3.5 w-3.5 text-[#00E599]" /> Send Thank-You
               </button>
-              <button onClick={onBack} className="flex items-center gap-1.5 rounded-xl bg-success-600 px-4 py-2 text-xs font-bold text-white hover:bg-success-700 shadow-sm transition">
-                <Plus className="h-3.5 w-3.5" /> Create another like this
+              <button onClick={onBack} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00E599] to-[#00C782] px-4 py-2 text-xs font-black text-[#060D0E] shadow-[0_0_15px_rgba(0,229,153,0.2)] hover:brightness-110 transition">
+                <Plus className="h-3.5 w-3.5" /> Create another
               </button>
             </div>
           </div>
@@ -290,24 +281,24 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
 
         {/* Cancelled banner */}
         {isCancelled && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-error-200 bg-error-50 p-4">
-            <Ban className="h-6 w-6 text-error-600" />
-            <div><p className="text-sm font-extrabold text-error-800">Split cancelled</p><p className="text-xs text-error-700">Refunds depend on the payment provider. Participants should contact their provider directly.</p></div>
+          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-950/40 p-4 text-red-300">
+            <Ban className="h-6 w-6 text-red-400 shrink-0" />
+            <div><p className="text-sm font-extrabold text-red-300">Split cancelled</p><p className="text-xs text-red-400/80">Refunds depend on the payment provider. Participants should contact their provider directly.</p></div>
           </div>
         )}
 
         {/* Segmented progress */}
-        <div className="mb-4 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 p-4">
+        <div className="mb-5 rounded-2xl border border-slate-800/80 bg-[#060D0E] p-4 sm:p-5">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-700">Collected vs remaining</span>
-            <span className={`text-2xl font-extrabold ${isSettled ? 'text-success-600' : 'text-slate-900'}`}>{split.settlement_percent}%</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">Collected vs remaining</span>
+            <span className={`text-2xl font-black ${isSettled ? 'text-[#00E599]' : 'text-white'}`}>{split.settlement_percent}%</span>
           </div>
-          <div className="flex h-4 w-full overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-gradient-to-r from-success-400 to-success-600 transition-all duration-700" style={{ width: `${Math.min(split.settlement_percent, 100)}%` }} />
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
+            <div className="h-full bg-gradient-to-r from-[#00E599] to-[#00C782] transition-all duration-700 shadow-[0_0_12px_rgba(0,229,153,0.4)]" style={{ width: `${Math.min(split.settlement_percent, 100)}%` }} />
           </div>
-          <div className="mt-3 flex items-center justify-between text-sm">
-            <span className="text-slate-500"><span className="font-bold text-success-600">{formatMoney(split.amount_paid)}</span> collected · {paidParticipants.length} paid</span>
-            {remaining > 0 && <span className="font-medium text-amber-600">{formatMoney(remaining)} remaining · {pendingParticipants.length} pending</span>}
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span className="text-slate-400"><span className="font-bold text-[#00E599]">{formatMoney(split.amount_paid)}</span> collected · {paidParticipants.length} paid</span>
+            {remaining > 0 && <span className="font-bold text-amber-400">{formatMoney(remaining)} remaining · {pendingParticipants.length} pending</span>}
           </div>
         </div>
 
@@ -318,20 +309,29 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
           <InfoItem icon={Receipt} label="Total Bill" value={formatMoney(split.total_amount)} />
         </div>
 
-        {split.note && <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/50 p-3"><StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /><p className="text-sm text-amber-800">{split.note}</p></div>}
+        {split.note && (
+          <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5">
+            <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <p className="text-xs font-semibold text-amber-300">{split.note}</p>
+          </div>
+        )}
       </div>
 
-      <div className="mb-5"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
+      <div className="mb-6"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div>
 
       {/* Participants */}
       {!isCancelled && (
-        <div className="mb-5 rounded-2xl border border-slate-100 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900">Participants & Payments</h2>
+        <div className="mb-6 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 sm:p-7 shadow-2xl">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="font-black text-white text-base">Participants & Payments</h2>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400">{paidParticipants.length}/{participants.length} paid</span>
+              <span className="text-xs font-bold text-slate-400">{paidParticipants.length}/{participants.length} paid</span>
               {pendingParticipants.length > 0 && (
-                <button onClick={handleRemindAll} disabled={remindingAll} className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                <button
+                  onClick={handleRemindAll}
+                  disabled={remindingAll}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition disabled:opacity-50"
+                >
                   {remindingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />} Remind all
                 </button>
               )}
@@ -357,7 +357,10 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
           </div>
 
           {!isSettled && (
-            <button onClick={() => setActionModal({ kind: 'add' })} className="mt-4 flex items-center gap-2 text-sm font-bold text-primary-600 hover:text-primary-700">
+            <button
+              onClick={() => setActionModal({ kind: 'add' })}
+              className="mt-5 flex items-center gap-2 text-xs font-extrabold text-[#00E599] hover:underline"
+            >
               <Plus className="h-4 w-4" /> Add person
             </button>
           )}
@@ -366,21 +369,31 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
 
       {/* Payment history */}
       {payments.length > 0 && (
-        <div className="mb-5 rounded-2xl border border-slate-100 bg-white p-6">
-          <h2 className="mb-4 font-bold text-slate-900">Payment History</h2>
-          <div className="space-y-2">
+        <div className="mb-6 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-6 shadow-2xl">
+          <h2 className="mb-4 font-black text-white text-base">Payment History</h2>
+          <div className="space-y-2.5">
             {payments.map((pay) => {
               const p = participants.find((pp) => pp.id === pay.split_participant_id);
               const isCash = pay.provider === 'Cash';
               return (
-                <div key={pay.id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm">
+                <div key={pay.id} className="flex items-center justify-between rounded-2xl border border-slate-800/80 bg-[#060D0E] p-3.5 text-sm">
                   <div className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${pay.status === 'SUCCESS' ? isCash ? 'bg-blue-100 text-blue-600' : 'bg-success-100 text-success-600' : 'bg-amber-100 text-amber-600'}`}>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-xl ${
+                      pay.status === 'SUCCESS'
+                        ? isCash ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-[#081B17] text-[#00E599] border border-[#0D382E]'
+                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    }`}>
                       {pay.status === 'SUCCESS' ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                     </div>
-                    <div><p className="font-medium text-slate-900">{p?.name || 'Unknown'}</p><p className="text-xs text-slate-400">{pay.provider_tx_ref} · {pay.provider}</p></div>
+                    <div>
+                      <p className="font-bold text-white text-xs">{p?.name || 'Unknown'}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">{pay.provider_tx_ref} · {pay.provider}</p>
+                    </div>
                   </div>
-                  <div className="text-right"><p className="font-bold text-slate-900">{formatMoney(pay.amount)}</p><p className="text-xs text-slate-400">{timeAgo(pay.requested_at)}</p></div>
+                  <div className="text-right">
+                    <p className="font-black text-white text-xs">{formatMoney(pay.amount)}</p>
+                    <p className="text-[11px] text-slate-500">{timeAgo(pay.requested_at)}</p>
+                  </div>
                 </div>
               );
             })}
@@ -390,22 +403,26 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
 
       {/* Danger zone */}
       {!isCancelled && (
-        <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border border-slate-100 bg-white p-4">
-          <button onClick={() => setActionModal({ kind: 'report' })} className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><ShieldAlert className="h-4 w-4" /> Report a problem</button>
-          <button onClick={() => setActionModal({ kind: 'cancel' })} className="flex items-center gap-2 rounded-lg border border-error-200 px-4 py-2.5 text-xs font-bold text-error-600 hover:bg-error-50"><Ban className="h-4 w-4" /> Cancel split</button>
+        <div className="mb-6 flex flex-wrap gap-3 rounded-3xl border border-slate-800/80 bg-[#0C1816] p-4 shadow-xl">
+          <button onClick={() => setActionModal({ kind: 'report' })} className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:border-slate-700 transition">
+            <ShieldAlert className="h-4 w-4 text-slate-400" /> Report a problem
+          </button>
+          <button onClick={() => setActionModal({ kind: 'cancel' })} className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-950/30 px-4 py-2.5 text-xs font-bold text-red-400 hover:bg-red-950/60 transition">
+            <Ban className="h-4 w-4" /> Cancel split
+          </button>
         </div>
       )}
 
       {/* Share modal */}
       <Modal open={showShare} onClose={() => setShowShare(false)} title="Share Split" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-slate-500">Share this link with participants. They can pay without creating a LUMO account.</p>
-          <div className="break-all rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-sm text-slate-700">/s/{split.ref_code}</div>
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-            <div className="mb-1 flex items-center gap-2"><Send className="h-4 w-4 text-blue-600" /><span className="text-xs font-bold text-blue-900">Reminder preview</span></div>
-            <p className="text-xs text-blue-800">{pendingParticipants[0]?.name || 'Kelvin'}, your {formatMoney(pendingParticipants[0]?.allocation_amount || 30000)} share is waiting. Pay securely here: /s/{split.ref_code}. Destination: {merchant?.display_name || 'Manual'}.</p>
+        <div className="space-y-4 text-white">
+          <p className="text-xs text-slate-400">Share this link with participants. They can pay directly without creating a LUMO account.</p>
+          <div className="break-all rounded-2xl border border-slate-800 bg-[#060D0E] p-3 font-mono text-xs text-[#00E599]">{window.location.origin}/s/{split.ref_code}</div>
+          <div className="rounded-2xl border border-[#0D382E] bg-[#081B17] p-3.5">
+            <div className="mb-1 flex items-center gap-2"><Send className="h-4 w-4 text-[#00E599]" /><span className="text-xs font-extrabold text-[#00E599]">Reminder Preview</span></div>
+            <p className="text-xs text-slate-300">{pendingParticipants[0]?.name || 'Participant'}, your {formatMoney(pendingParticipants[0]?.allocation_amount || 30000)} share is waiting. Pay securely here: /s/{split.ref_code}.</p>
           </div>
-          <button onClick={() => setShowShare(false)} className="w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">Done</button>
+          <button onClick={() => setShowShare(false)} className="w-full rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-2.5 text-xs font-black text-[#060D0E] hover:brightness-110 transition">Done</button>
         </div>
       </Modal>
 
@@ -418,16 +435,16 @@ export default function SplitDetailView({ split: initialSplit, onBack, onPay }: 
       {actionModal?.kind === 'thankyou' && <ThankYouModal onSend={handleSendThankYou} onClose={() => setActionModal(null)} />}
 
       {/* Toast */}
-      {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg animate-slide-up">{toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-[#081B17] border border-[#00E599]/40 px-5 py-3 text-xs font-bold text-[#00E599] shadow-2xl animate-slide-up">{toast}</div>}
     </div>
   );
 }
 
 function InfoItem({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <div className="mb-1 flex items-center gap-1.5"><Icon className="h-3.5 w-3.5 text-slate-400" /><span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</span></div>
-      <p className="truncate text-sm font-bold text-slate-900">{value}</p>
+    <div className="rounded-2xl bg-[#060D0E] border border-slate-800/80 p-3.5">
+      <div className="mb-1 flex items-center gap-1.5"><Icon className="h-3.5 w-3.5 text-slate-500" /><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span></div>
+      <p className="truncate text-xs font-bold text-white">{value}</p>
     </div>
   );
 }
@@ -439,32 +456,59 @@ function ParticipantRow({ participant, isSettled, onPay, onRemind, onMarkCash, o
   const initials = participant.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`relative flex items-center gap-3 rounded-xl border p-3.5 transition-all ${isPaid ? 'border-success-100 bg-success-50/30' : 'border-slate-100 hover:border-slate-200'}`}>
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isPaid ? 'bg-success-100 text-success-700' : 'bg-slate-100 text-slate-600'}`}>{initials}</div>
+    <div className={`relative flex items-center gap-3 rounded-2xl border p-3.5 transition-all ${
+      isPaid ? 'border-[#0D382E] bg-[#081B17]/60' : 'border-slate-800/80 bg-[#060D0E]/60 hover:border-slate-700'
+    }`}>
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
+        isPaid ? 'bg-[#0D382E] text-[#00E599] border border-[#00E599]/30' : 'bg-slate-800 text-slate-300'
+      }`}>{initials}</div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2"><p className="truncate text-sm font-semibold text-slate-900">{participant.name}</p>{participant.is_organizer && <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-bold text-primary-600">ORGANIZER</span>}</div>
-        <div className="mt-0.5 flex items-center gap-2"><span className="text-xs text-slate-400">{participant.phone || 'No phone'}</span><StatusBadge status={participant.status} type="participant" /></div>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-xs font-bold text-white">{participant.name}</p>
+          {participant.is_organizer && <span className="rounded-lg bg-[#0D382E] border border-[#00E599]/30 px-1.5 py-0.5 text-[9px] font-black text-[#00E599]">ORGANIZER</span>}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2">
+          <span className="text-[11px] text-slate-500">{participant.phone || 'No phone'}</span>
+          <StatusBadge status={participant.status} type="participant" />
+        </div>
       </div>
-      <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-900">{formatMoney(participant.allocation_amount)}</p>{isPaid && participant.paid_at && <p className="text-[10px] font-medium text-success-600">{timeAgo(participant.paid_at)}</p>}</div>
+      <div className="shrink-0 text-right">
+        <p className="text-xs font-black text-white">{formatMoney(participant.allocation_amount)}</p>
+        {isPaid && participant.paid_at && <p className="text-[10px] font-semibold text-[#00E599]">{timeAgo(participant.paid_at)}</p>}
+      </div>
       <div className="flex shrink-0 gap-1.5">
         {!isPaid && !isSettled && (
           <>
-            <button onClick={onRemind} disabled={reminding} className="rounded-lg border border-slate-200 p-2 text-slate-400 transition-all hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50" title="Send reminder">{reminding ? <Check className="h-4 w-4 text-success-500" /> : <Bell className="h-4 w-4" />}</button>
-            <button onClick={onPay} className="whitespace-nowrap rounded-lg bg-primary-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-primary-700">Pay</button>
-            <button onClick={onToggleMenu} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:bg-slate-50"><MoreHorizontal className="h-4 w-4" /></button>
+            <button onClick={onRemind} disabled={reminding} className="rounded-xl border border-slate-800 bg-[#0C1816] p-2 text-slate-400 transition-all hover:border-amber-500/40 hover:text-amber-400 disabled:opacity-50" title="Send reminder">
+              {reminding ? <Check className="h-4 w-4 text-[#00E599]" /> : <Bell className="h-4 w-4" />}
+            </button>
+            <button onClick={onPay} className="whitespace-nowrap rounded-xl bg-gradient-to-r from-[#00E599] to-[#00C782] px-3 py-1.5 text-xs font-black text-[#060D0E] shadow-[0_0_12px_rgba(0,229,153,0.25)] hover:brightness-110 transition">
+              Pay
+            </button>
+            <button onClick={onToggleMenu} className="rounded-xl border border-slate-800 bg-[#0C1816] p-2 text-slate-400 hover:text-white">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
           </>
         )}
-        {isPaid && <div className="flex items-center gap-1 px-2 text-success-600"><CheckCircle2 className="h-4 w-4" /></div>}
+        {isPaid && <div className="flex items-center gap-1 px-2 text-[#00E599]"><CheckCircle2 className="h-4 w-4" /></div>}
       </div>
 
       {/* Dropdown menu */}
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={onToggleMenu} />
-          <div className="absolute right-4 top-full z-20 mt-1 w-48 rounded-xl border border-slate-200 bg-white py-1 shadow-xl animate-scale-in">
-            <button onClick={() => { onToggleMenu(); onMarkCash(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Check className="h-4 w-4 text-success-600" /> Mark as paid in cash</button>
-            <button onClick={() => { onToggleMenu(); onEdit(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Pencil className="h-4 w-4 text-slate-500" /> Edit amount</button>
-            {!participant.is_organizer && <button onClick={() => { onToggleMenu(); onRemove(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-error-600 hover:bg-error-50"><Trash2 className="h-4 w-4" /> Remove person</button>}
+          <div className="absolute right-4 top-full z-20 mt-1 w-48 rounded-2xl border border-slate-800 bg-[#0C1816] py-1.5 shadow-2xl animate-scale-in">
+            <button onClick={() => { onToggleMenu(); onMarkCash(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+              <Check className="h-4 w-4 text-[#00E599]" /> Mark as paid in cash
+            </button>
+            <button onClick={() => { onToggleMenu(); onEdit(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-800/60 hover:text-white transition">
+              <Pencil className="h-4 w-4 text-slate-400" /> Edit amount
+            </button>
+            {!participant.is_organizer && (
+              <button onClick={() => { onToggleMenu(); onRemove(); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-400 hover:bg-red-950/40 transition">
+                <Trash2 className="h-4 w-4" /> Remove person
+              </button>
+            )}
           </div>
         </>
       )}
@@ -474,76 +518,160 @@ function ParticipantRow({ participant, isSettled, onPay, onRemind, onMarkCash, o
 
 function EditAmountModal({ participant, onSave, onClose }: { participant: Participant; onSave: (p: Participant, amount: number) => void; onClose: () => void }) {
   const [amount, setAmount] = useState(String(participant.allocation_amount));
-  return <Modal open onClose={onClose} title="Edit share" size="sm">
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">Update {participant.name}'s share amount.</p>
-      <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-primary-400" />
-      <div className="flex gap-3"><button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button onClick={() => onSave(participant, Number(amount) || 0)} className="flex-1 rounded-lg bg-primary-600 py-2.5 text-sm font-bold text-white hover:bg-primary-700">Save</button></div>
-    </div>
-  </Modal>;
+  return (
+    <Modal open onClose={onClose} title="Edit Share" size="sm">
+      <div className="space-y-4 text-white">
+        <p className="text-xs text-slate-400">Update {participant.name}'s share amount.</p>
+        <input
+          type="number"
+          min="1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#00E599]"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 text-xs font-bold text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={() => onSave(participant, Number(amount) || 0)} className="flex-1 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-2.5 text-xs font-black text-[#060D0E]">Save</button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function AddPersonModal({ onSave, onClose }: { onSave: (name: string, phone: string, amount: number) => void; onClose: () => void }) {
-  const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [amount, setAmount] = useState('');
-  return <Modal open onClose={onClose} title="Add person" size="sm">
-    <div className="space-y-4">
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-primary-400" />
-      <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-primary-400" />
-      <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Share amount (TZS)" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-primary-400" />
-      <div className="flex gap-3"><button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button onClick={() => name.trim() && onSave(name.trim(), phone.trim(), Number(amount) || 0)} disabled={!name.trim()} className="flex-1 rounded-lg bg-primary-600 py-2.5 text-sm font-bold text-white hover:bg-primary-700 disabled:opacity-50">Add</button></div>
-    </div>
-  </Modal>;
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [amount, setAmount] = useState('');
+  return (
+    <Modal open onClose={onClose} title="Add Person" size="sm">
+      <div className="space-y-4 text-white">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#00E599]"
+        />
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Phone (optional)"
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#00E599]"
+        />
+        <input
+          type="number"
+          min="1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Share amount (TZS)"
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#00E599]"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 text-xs font-bold text-slate-400 hover:text-white">Cancel</button>
+          <button
+            onClick={() => name.trim() && onSave(name.trim(), phone.trim(), Number(amount) || 0)}
+            disabled={!name.trim()}
+            className="flex-1 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-2.5 text-xs font-black text-[#060D0E] disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function CancelSplitModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
-  return <Modal open onClose={onClose} title="Cancel this split?" size="sm">
-    <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-xl border border-error-100 bg-error-50 p-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-error-600" /><p className="text-sm text-error-800">This will cancel the split. Refunds depend on the payment provider — participants who already paid should contact their provider directly.</p></div>
-      <div className="flex gap-3"><button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Keep split</button><button onClick={onConfirm} className="flex-1 rounded-lg bg-error-600 py-2.5 text-sm font-bold text-white hover:bg-error-700">Cancel split</button></div>
-    </div>
-  </Modal>;
+  return (
+    <Modal open onClose={onClose} title="Cancel this Split?" size="sm">
+      <div className="space-y-4 text-white">
+        <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-950/40 p-3.5">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+          <p className="text-xs text-red-300">This will cancel the split. Refunds depend on the payment provider — participants who already paid should contact their provider directly.</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 text-xs font-bold text-slate-400 hover:text-white">Keep Split</button>
+          <button onClick={onConfirm} className="flex-1 rounded-2xl bg-red-600 py-2.5 text-xs font-bold text-white hover:bg-red-700">Cancel Split</button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function ReportProblemModal({ onSubmit, onClose }: { onSubmit: (description: string) => void; onClose: () => void }) {
   const [description, setDescription] = useState('');
-  return <Modal open onClose={onClose} title="Report a problem" size="sm">
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">Describe the issue and our support team will look into it.</p>
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What went wrong?" rows={4} className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-primary-400" />
-      <div className="flex gap-3"><button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button onClick={() => onSubmit(description.trim() || 'No description provided')} className="flex-1 rounded-lg bg-primary-600 py-2.5 text-sm font-bold text-white hover:bg-primary-700">Submit</button></div>
-    </div>
-  </Modal>;
+  return (
+    <Modal open onClose={onClose} title="Report a Problem" size="sm">
+      <div className="space-y-4 text-white">
+        <p className="text-xs text-slate-400">Describe the issue and our support team will look into it.</p>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What went wrong?"
+          rows={4}
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-medium text-white outline-none focus:border-[#00E599]"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 text-xs font-bold text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={() => onSubmit(description.trim() || 'No description provided')} className="flex-1 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-2.5 text-xs font-black text-[#060D0E]">Submit</button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function ReceiptModal({ split, merchant, participants, payments, onDownload, onClose }: { split: Split; merchant: Merchant | null; participants: Participant[]; payments: PaymentAttempt[]; onDownload: () => void; onClose: () => void }) {
-  return <Modal open onClose={onClose} title="Receipt" size="md">
-    <div className="space-y-4">
-      <div className="rounded-xl bg-slate-50 p-4">
-        <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3"><span className="text-xs font-bold uppercase text-slate-400">Bill</span><span className="font-bold text-slate-900">{split.title}</span></div>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-mono text-slate-700">{split.ref_code}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Destination</span><span className="font-medium text-slate-900">{merchant?.display_name || 'Manual'}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-bold text-slate-900">{formatMoney(split.total_amount)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Collected</span><span className="font-bold text-success-600">{formatMoney(split.amount_paid)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Status</span><StatusBadge status={split.status} /></div>
+  return (
+    <Modal open onClose={onClose} title="Receipt" size="md">
+      <div className="space-y-4 text-white">
+        <div className="rounded-2xl border border-slate-800/80 bg-[#060D0E] p-4">
+          <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-3">
+            <span className="text-xs font-bold uppercase text-slate-500">Bill</span>
+            <span className="font-extrabold text-white text-sm">{split.title}</span>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between"><span className="text-slate-400">Reference</span><span className="font-mono text-white">{split.ref_code}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Destination</span><span className="font-bold text-white">{merchant?.display_name || 'Manual'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Total</span><span className="font-black text-white">{formatMoney(split.total_amount)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Collected</span><span className="font-black text-[#00E599]">{formatMoney(split.amount_paid)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Status</span><StatusBadge status={split.status} /></div>
+          </div>
         </div>
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Participants</p>
+          {participants.map((p) => (
+            <div key={p.id} className="flex justify-between text-xs py-1 border-b border-slate-800/40">
+              <span className="text-slate-300">{p.name}</span>
+              <span className="font-bold text-white">{formatMoney(p.allocation_amount)} — {p.status}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={onDownload} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-3 text-xs font-black text-[#060D0E] hover:brightness-110 transition">
+          <Download className="h-4 w-4" /> Download Receipt
+        </button>
       </div>
-      <div className="space-y-1.5">
-        <p className="text-xs font-bold uppercase text-slate-400">Participants</p>
-        {participants.map((p) => <div key={p.id} className="flex justify-between text-sm"><span className="text-slate-600">{p.name}</span><span className="font-medium text-slate-900">{formatMoney(p.allocation_amount)} — {p.status}</span></div>)}
-      </div>
-      <button onClick={onDownload} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700"><Download className="h-4 w-4" /> Download receipt</button>
-    </div>
-  </Modal>;
+    </Modal>
+  );
 }
 
 function ThankYouModal({ onSend, onClose }: { onSend: (message: string) => void; onClose: () => void }) {
   const [message, setMessage] = useState('Thank you all for contributing! The bill is fully settled.');
-  return <Modal open onClose={onClose} title="Send thank-you" size="sm">
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">Send a thank-you message to all participants.</p>
-      <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-primary-400" />
-      <div className="flex gap-3"><button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button onClick={() => onSend(message)} className="flex-1 rounded-lg bg-success-600 py-2.5 text-sm font-bold text-white hover:bg-success-700"><Heart className="mr-1 inline h-4 w-4" /> Send</button></div>
-    </div>
-  </Modal>;
+  return (
+    <Modal open onClose={onClose} title="Send Thank-You" size="sm">
+      <div className="space-y-4 text-white">
+        <p className="text-xs text-slate-400">Send a thank-you message to all participants.</p>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          className="w-full rounded-2xl border border-slate-800 bg-[#060D0E] px-4 py-3 text-xs font-medium text-white outline-none focus:border-[#00E599]"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-800 bg-[#060D0E] py-2.5 text-xs font-bold text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={() => onSend(message)} className="flex-1 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] py-2.5 text-xs font-black text-[#060D0E] hover:brightness-110 transition">
+            <Heart className="mr-1 inline h-4 w-4 fill-current" /> Send
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
