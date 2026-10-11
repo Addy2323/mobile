@@ -65,36 +65,36 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
   });
 
   return (
-    <div className="p-4 space-y-4 no-tap-highlight">
+    <div className="p-4 space-y-4 no-tap-highlight text-white">
       {/* Search Bar & Refresh */}
       <div className="flex items-center space-x-2">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search splits by title or category..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 text-sm font-medium focus:border-indigo-600 focus:outline-none"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#0C181A] rounded-xl border border-white/10 text-sm font-medium text-white placeholder-white/40 focus:border-[#00E599] focus:outline-none"
           />
         </div>
 
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 active:scale-95 transition-all"
+          className="p-2.5 bg-[#0C181A] border border-white/10 rounded-xl text-white/70 hover:text-[#00E599] active:scale-95 transition-all"
           title="Refresh splits"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00E599]' : ''}`} />
         </button>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex bg-slate-200/60 p-1 rounded-xl text-xs font-bold text-slate-600">
+      <div className="flex bg-[#0C181A] p-1 rounded-xl text-xs font-bold text-white/50 border border-white/10">
         <button
           onClick={() => setFilter('all')}
           className={`flex-1 py-2 rounded-lg transition-all ${
-            filter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+            filter === 'all' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-lg shadow-[#00E599]/20' : 'hover:text-white'
           }`}
         >
           All ({splits.length})
@@ -103,7 +103,7 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
         <button
           onClick={() => setFilter('open')}
           className={`flex-1 py-2 rounded-lg transition-all ${
-            filter === 'open' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+            filter === 'open' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-lg shadow-[#00E599]/20' : 'hover:text-white'
           }`}
         >
           Open ({splits.filter((s) => s.status !== 'Settled').length})
@@ -112,7 +112,7 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
         <button
           onClick={() => setFilter('settled')}
           className={`flex-1 py-2 rounded-lg transition-all ${
-            filter === 'settled' ? 'bg-white text-slate-900 shadow-sm' : 'hover:text-slate-900'
+            filter === 'settled' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-lg shadow-[#00E599]/20' : 'hover:text-white'
           }`}
         >
           Settled ({splits.filter((s) => s.status === 'Settled').length})
@@ -127,9 +127,9 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
           <CardSkeleton />
         </div>
       ) : filteredSplits.length === 0 ? (
-        <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center space-y-2 mt-4">
-          <Clock className="w-10 h-10 text-slate-300 mx-auto" />
-          <p className="text-sm font-semibold text-slate-600">No activity matching filter</p>
+        <div className="bg-[#0C181A] p-8 rounded-3xl border border-white/10 text-center space-y-2 mt-4 shadow-xl">
+          <Clock className="w-10 h-10 text-white/30 mx-auto" />
+          <p className="text-sm font-semibold text-white/60">No activity matching filter</p>
         </div>
       ) : (
         <div className="space-y-3 pt-1">
@@ -137,28 +137,28 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
             <div
               key={split.id}
               onClick={() => onSelectSplit(split)}
-              className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between"
+              className="bg-[#0C181A] p-4 rounded-2xl border border-white/10 shadow-xl hover:border-[#00E599]/40 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between"
             >
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
-                  <span className="font-bold text-slate-900 text-sm">{split.title}</span>
+                  <span className="font-bold text-white text-sm">{split.title}</span>
                   <StatusBadge status={split.status as any} />
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-white/50">
                   {split.participant_count} people · Created {formatDate(split.created_at)}
                 </p>
               </div>
 
               <div className="text-right flex items-center space-x-2">
                 <div>
-                  <span className="text-sm font-extrabold text-slate-900 block">
+                  <span className="text-sm font-extrabold text-white block">
                     {formatMoney(split.total_amount)}
                   </span>
-                  <span className="text-[11px] font-semibold text-indigo-600 block">
+                  <span className="text-[11px] font-extrabold text-[#00E599] block">
                     {split.settlement_percent || 0}% paid
                   </span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
+                <ChevronRight className="w-4 h-4 text-white/40" />
               </div>
             </div>
           ))}

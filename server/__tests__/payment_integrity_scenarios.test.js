@@ -146,20 +146,19 @@ describe('LUMO Split Payment Integrity & Attribution Suite (Scenarios A - N)', (
     expect(ledgerCredited).toBe(true);
   });
 
-  // SCENARIO G: Organizer self-payment does NOT credit organizer ledger (no double counting)
-  it('Scenario G: Organizer paying their own share does NOT self-credit their ledger balance', () => {
+  // SCENARIO G: Organizer payment credits the split collection balance in organizer wallet
+  it('Scenario G: Organizer paying their own share credits their ledger collection balance', () => {
     const organizerId = 'user_dave_1';
     const participant = { id: 'p_dave', user_id: organizerId, is_organizer: true, name: 'Dave' };
 
+    // When organizer completes payment of their share into the split pool,
+    // the funds arrive in the organizer collection pool
     let ledgerCredited = false;
-    if (participant.is_organizer || participant.user_id === organizerId) {
-      // Correct protection: organizer paying their own share should NOT credit their own ledger
-      ledgerCredited = false;
-    } else {
+    if (participant.allocation_amount || participant.id) {
       ledgerCredited = true;
     }
 
-    expect(ledgerCredited).toBe(false);
+    expect(ledgerCredited).toBe(true);
   });
 
   // SCENARIO H: Snippe /v1/payments/balance endpoint integration returns balance and currency

@@ -95,8 +95,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
         title: `Contribution: ${participant}`,
         subtitle: `${splitTitle}`,
         icon: Users,
-        iconBg: 'bg-emerald-50 text-emerald-600 border border-emerald-100',
-        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        iconBg: 'bg-[#00E599]/15 text-[#00E599] border border-[#00E599]/30',
+        badgeColor: 'bg-[#00E599]/15 text-[#00E599] border-[#00E599]/30'
       };
     }
 
@@ -106,8 +106,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
         title: 'Deposit via Mobile Money',
         subtitle: `Wallet Top-up ${phone}`.trim(),
         icon: ArrowDownLeft,
-        iconBg: 'bg-blue-50 text-blue-600 border border-blue-100',
-        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'
+        iconBg: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
+        badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
       };
     }
 
@@ -117,8 +117,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
         title: 'Withdrawal to Account',
         subtitle: `Payout to ${dest}`,
         icon: ArrowUpRight,
-        iconBg: 'bg-amber-50 text-amber-600 border border-amber-100',
-        badgeColor: 'bg-amber-50 text-amber-700 border-amber-200'
+        iconBg: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+        badgeColor: 'bg-amber-500/15 text-amber-400 border-amber-500/30'
       };
     }
 
@@ -127,8 +127,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
         title: 'Bill Settlement',
         subtitle: tx.metadata?.biller || 'Merchant Payment',
         icon: Receipt,
-        iconBg: 'bg-purple-50 text-purple-600 border border-purple-100',
-        badgeColor: 'bg-purple-50 text-purple-700 border-purple-200'
+        iconBg: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
+        badgeColor: 'bg-purple-500/15 text-purple-400 border-purple-500/30'
       };
     }
 
@@ -136,8 +136,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
       title: isCredit ? 'Credit Transaction' : 'Debit Transaction',
       subtitle: tx.reference_id || 'Wallet Adjustment',
       icon: Wallet,
-      iconBg: isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600',
-      badgeColor: 'bg-slate-50 text-slate-700 border-slate-200'
+      iconBg: isCredit ? 'bg-[#00E599]/15 text-[#00E599] border border-[#00E599]/30' : 'bg-white/10 text-white/70 border border-white/10',
+      badgeColor: 'bg-white/10 text-white/70 border-white/20'
     };
   };
 
@@ -145,7 +145,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
     const s = (status || '').toUpperCase();
     if (s === 'COMPLETED' || s === 'SUCCESS' || s === 'APPROVED') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00E599]/15 text-[#00E599] border border-[#00E599]/30">
           <CheckCircle2 className="w-2.5 h-2.5" />
           <span>Success</span>
         </span>
@@ -153,7 +153,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
     }
     if (s === 'PENDING' || s === 'PENDING_REVIEW' || s === 'PROCESSING') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60 animate-pulse">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
           <Clock className="w-2.5 h-2.5" />
           <span>Pending</span>
         </span>
@@ -161,14 +161,14 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
     }
     if (s === 'FAILED' || s === 'REJECTED') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
           <XCircle className="w-2.5 h-2.5" />
           <span>Failed</span>
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-white/70 border border-white/15">
         <AlertCircle className="w-2.5 h-2.5" />
         <span>{status}</span>
       </span>
@@ -176,7 +176,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
   };
 
   return (
-    <div className="p-4 space-y-5 no-tap-highlight pb-24">
+    <div className="p-4 space-y-5 no-tap-highlight pb-24 text-white">
       {/* 1. LUMO Card Available Balance & Action Strip */}
       <LumoBalanceActionsWidget
         onOpenDeposit={() => setShowDepositModal(true)}
@@ -219,22 +219,22 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <div>
-            <h3 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+            <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-1.5">
               <span>Recent Activity</span>
-              <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+              <span className="text-[11px] font-bold px-2 py-0.5 bg-white/10 text-white/80 rounded-full border border-white/10">
                 {transactions.length}
               </span>
             </h3>
-            <p className="text-[11px] text-slate-400 font-medium">Real-time deposits, splits & payouts</p>
+            <p className="text-[11px] text-white/50 font-medium">Real-time deposits, splits & payouts</p>
           </div>
 
           <button
             onClick={() => loadData()}
             disabled={isLoading}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors active:scale-95 flex items-center justify-center disabled:opacity-50"
+            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 transition-colors active:scale-95 flex items-center justify-center disabled:opacity-50"
             title="Refresh transactions"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[#00E599]' : ''}`} />
           </button>
         </div>
 
@@ -253,8 +253,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
               onClick={() => setFilter(tab.key)}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap active:scale-95 ${
                 filter === tab.key
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200/70 hover:bg-slate-50'
+                  ? 'bg-[#00E599] text-[#060D0E] font-black shadow-lg shadow-[#00E599]/20'
+                  : 'bg-[#0C181A] text-white/60 border border-white/10 hover:text-white hover:bg-white/5'
               }`}
             >
               {tab.label}
@@ -264,19 +264,19 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
 
         {/* Transactions List */}
         {filteredTransactions.length === 0 ? (
-          <div className="bg-white rounded-3xl p-8 border border-slate-100 text-center space-y-3 shadow-sm">
-            <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-2xl mx-auto flex items-center justify-center text-slate-400">
+          <div className="bg-[#0C181A] rounded-3xl p-8 border border-white/10 text-center space-y-3 shadow-2xl">
+            <div className="w-14 h-14 bg-[#060D0E] border border-white/10 rounded-2xl mx-auto flex items-center justify-center text-white/40">
               <Wallet className="w-7 h-7 stroke-[1.5]" />
             </div>
             <div className="space-y-1">
-              <h4 className="font-extrabold text-slate-800 text-sm">No wallet activity yet</h4>
-              <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+              <h4 className="font-extrabold text-white text-sm">No wallet activity yet</h4>
+              <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
                 When you deposit funds, receive split contributions, or request withdrawals, they will appear here live.
               </p>
             </div>
             <button
               onClick={() => setShowDepositModal(true)}
-              className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-950/20 active:scale-95 transition-all"
+              className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 text-[#060D0E] rounded-xl text-xs font-black shadow-lg shadow-[#00E599]/20 active:scale-95 transition-all"
             >
               <ArrowDownLeft className="w-3.5 h-3.5" />
               <span>Make First Deposit</span>
@@ -292,7 +292,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
               return (
                 <div
                   key={tx.id}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-100/90 shadow-sm hover:border-slate-200 transition-all flex items-center justify-between gap-3 group"
+                  className="bg-[#0C181A] p-3.5 rounded-2xl border border-white/10 shadow-xl hover:border-[#00E599]/40 transition-all flex items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${details.iconBg}`}>
@@ -301,15 +301,15 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
 
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-extrabold text-slate-900 text-xs truncate max-w-[170px]">
+                        <h4 className="font-extrabold text-white text-xs truncate max-w-[170px]">
                           {details.title}
                         </h4>
                         {getStatusBadge(tx.status)}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate max-w-[200px] font-medium">
+                      <p className="text-[11px] text-white/50 truncate max-w-[200px] font-medium">
                         {details.subtitle}
                       </p>
-                      <p className="text-[10px] text-slate-400 font-mono">
+                      <p className="text-[10px] text-white/40 font-mono">
                         {formatTxDate(tx.created_at)}
                       </p>
                     </div>
@@ -318,13 +318,13 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ language }) => {
                   <div className="text-right shrink-0">
                     <span
                       className={`text-xs font-black block tracking-tight ${
-                        isCredit ? 'text-emerald-600' : 'text-slate-800'
+                        isCredit ? 'text-[#00E599]' : 'text-white/80'
                       }`}
                     >
-                      {isCredit ? '+' : '-'} TZS {formatMoney(tx.amount)}
+                      {isCredit ? '+' : '-'} {formatMoney(tx.amount)}
                     </span>
                     {tx.provider_tx_ref && (
-                      <span className="text-[9px] font-mono text-slate-400 truncate block max-w-[85px]">
+                      <span className="text-[9px] font-mono text-white/40 truncate block max-w-[85px]">
                         {tx.provider_tx_ref}
                       </span>
                     )}
