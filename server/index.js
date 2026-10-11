@@ -1612,6 +1612,50 @@ app.post('/api/payments/initiate', async (req, res) => {
   }
 });
 
+// Helper: Credit the organizer's available balance and record a ledger transaction when a split participant pays
+export async function creditSplitCreatorForParticipantPayment(client, {
+  splitId,
+  participantId,
+  amountPaid,
+  providerTxRef,
+  participantName,
+  participantPhone
+}) {
+  try {
+    const sRes = await client.query('SELECT owner_user_id, title FROM splits WHERE id = $1', [splitId]);
+    if (sRes.rows.length === 0) return;
+    const split = sRes.rows[0];
+    const ownerUserId = split.owner_user_id;
+    if (!ownerUserId) return;
+
+    const numAmount = Number(amountPaid);
+    if (!numAmount || numAmount <= 0) return;
+
+    const idempotencyKey = `split-credit-${participantId}-${providerTxRef || 'paid'}`;
+
+    console.log(`[SplitCredit] Crediting organizer (${ownerUserId}) with TZS ${numAmount} for participant ${participantName || participantId} on split "${split.title}"`);
+
+    await LedgerService.postCredit(client, {
+      userId: ownerUserId,
+      amount: numAmount,
+      transactionType: 'SPLIT_COLLECTION',
+      referenceType: 'SPLIT',
+      referenceId: splitId,
+      providerTxRef: providerTxRef,
+      idempotencyKey: idempotencyKey,
+      metadata: {
+        split_id: splitId,
+        split_title: split.title,
+        participant_id: participantId,
+        participant_name: participantName || 'Participant',
+        participant_phone: participantPhone || null
+      }
+    });
+  } catch (err) {
+    console.error(`[SplitCredit Error] Failed to credit organizer for split ${splitId}:`, err.message);
+  }
+}
+
 // 2. Real-Time Snippe Webhook Endpoint (HMAC Signed & Idempotent)
 app.post('/api/payments/webhooks/snippe', async (req, res) => {
   const rawBuffer = req.body;
@@ -1678,6 +1722,16 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
            WHERE split_participant_id = $1 AND status = 'PENDING'`,
           [participantId]
         );
+
+        // Credit the organizer's available balance in real time
+        await creditSplitCreatorForParticipantPayment(client, {
+          splitId,
+          participantId,
+          amountPaid: participant.allocation_amount,
+          providerTxRef: providerTxRef || 'SNP-CONFIRMED',
+          participantName: participant.name,
+          participantPhone: participant.phone
+        });
 
         // Recalculate Split Total Paid & Settlement Percentage
         const pSumRes = await client.query(
@@ -1787,6 +1841,16 @@ app.post('/api/payments/simulate-webhook', async (req, res) => {
        WHERE split_participant_id = $1`,
       [participant_id]
     );
+
+    // Credit organizer's available balance in real time
+    await creditSplitCreatorForParticipantPayment(client, {
+      splitId,
+      participantId: participant_id,
+      amountPaid: participant.allocation_amount,
+      providerTxRef: txRef,
+      participantName: participant.name,
+      participantPhone: participant.phone
+    });
 
     // Recalculate Split Total Paid & Settlement Percentage
     const pSumRes = await client.query(
@@ -2032,6 +2096,16 @@ async function applySuccessfulPayment(client, { orderId, participantId, amountPa
         OR provider_tx_ref = $3`,
     [providerTxRef || orderId, pId, orderId]
   );
+
+  // Credit organizer's available balance in real time
+  await creditSplitCreatorForParticipantPayment(client, {
+    splitId,
+    participantId: pId,
+    amountPaid: finalPaid,
+    providerTxRef: providerTxRef || orderId,
+    participantName: participant.name,
+    participantPhone: participant.phone
+  });
 
   // Recalculate Split status & settlement percentage
   const pSumRes = await client.query(

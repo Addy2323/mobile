@@ -1,4 +1,5 @@
 import { SnippePaymentProvider } from './snippeProvider.js';
+import { creditSplitCreatorForParticipantPayment } from './ledgerService.js';
 
 export class SnippeReconciliationJob {
   /**
@@ -85,6 +86,16 @@ export class SnippeReconciliationJob {
                    WHERE id = $2`,
                   [totalPaid, participant.split_id]
                 );
+
+                // Credit the organizer's available balance in real time
+                await creditSplitCreatorForParticipantPayment(client, {
+                  splitId: participant.split_id,
+                  participantId: partId,
+                  amountPaid: allocAmount,
+                  providerTxRef: reference,
+                  participantName: participant.name,
+                  participantPhone: participant.phone
+                });
               }
             }
 

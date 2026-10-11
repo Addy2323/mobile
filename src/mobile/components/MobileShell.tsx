@@ -12,7 +12,7 @@ import { PayLinkScreen } from '../screens/PayLinkScreen';
 import { BirthdayScreen } from '../screens/BirthdayScreen';
 import { MichangoScreen } from '../screens/MichangoScreen';
 import { PayBillScreen } from '../screens/PayBillScreen';
-import { RewardsScreen } from '../screens/RewardsScreen';
+import { WalletScreen } from '../screens/WalletScreen';
 import { NotificationsSheet } from '../screens/NotificationsSheet';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { Toast, type ToastMessage } from './Toast';
@@ -128,7 +128,7 @@ export const MobileShell: React.FC = () => {
                 />
               )}
 
-              {currentTab === 'rewards' && <RewardsScreen language={language} />}
+              {currentTab === 'rewards' && <WalletScreen language={language} />}
 
               {currentTab === 'profile' && (
                 <ProfileScreen

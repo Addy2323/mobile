@@ -197,3 +197,50 @@ export class LedgerService {
     };
   }
 }
+
+/**
+ * Automatically credit a split creator's available ledger balance
+ * whenever a participant completes their payment share.
+ */
+export async function creditSplitCreatorForParticipantPayment(client, {
+  splitId,
+  participantId,
+  amountPaid,
+  providerTxRef,
+  participantName,
+  participantPhone
+}) {
+  try {
+    const sRes = await client.query('SELECT owner_user_id, title FROM splits WHERE id = $1', [splitId]);
+    if (sRes.rows.length === 0) return;
+    const split = sRes.rows[0];
+    const ownerUserId = split.owner_user_id;
+    if (!ownerUserId) return;
+
+    const numAmount = Number(amountPaid);
+    if (!numAmount || numAmount <= 0) return;
+
+    const idempotencyKey = `split-credit-${participantId}-${providerTxRef || 'paid'}`;
+
+    console.log(`[SplitCredit] Crediting organizer (${ownerUserId}) with TZS ${numAmount} for participant ${participantName || participantId} on split "${split.title}"`);
+
+    await LedgerService.postCredit(client, {
+      userId: ownerUserId,
+      amount: numAmount,
+      transactionType: 'SPLIT_COLLECTION',
+      referenceType: 'SPLIT',
+      referenceId: splitId,
+      providerTxRef: providerTxRef,
+      idempotencyKey: idempotencyKey,
+      metadata: {
+        split_id: splitId,
+        split_title: split.title,
+        participant_id: participantId,
+        participant_name: participantName || 'Participant',
+        participant_phone: participantPhone || null
+      }
+    });
+  } catch (err) {
+    console.error(`[SplitCredit Error] Failed to credit organizer for split ${splitId}:`, err.message);
+  }
+}

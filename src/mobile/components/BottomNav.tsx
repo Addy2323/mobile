@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Activity, QrCode, Award, User } from 'lucide-react';
+import { Home, Activity, QrCode, Award, User, Wallet } from 'lucide-react';
 import { getTranslation, type Language } from '@/lib/i18n';
 
 export type TabType = 'home' | 'activity' | 'scan' | 'rewards' | 'profile';
@@ -53,7 +53,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange, l
           <span className="text-[11px] font-extrabold text-[#12285C] mt-0.5 leading-tight">{t('scan')}</span>
         </button>
 
-        {/* 4. Rewards */}
+        {/* 4. Wallet */}
         <button
           onClick={() => onTabChange('rewards')}
           className={`flex flex-col items-center justify-center w-full py-1 transition-all active:scale-95 group ${
@@ -61,9 +61,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange, l
           }`}
         >
           <div className={`px-3 py-1 rounded-full transition-colors ${currentTab === 'rewards' ? 'bg-[#EAF0FF]' : 'bg-transparent'}`}>
-            <Award className={`w-5 h-5 ${currentTab === 'rewards' ? 'stroke-[2.5px] text-[#12285C]' : 'stroke-2 text-[#64748B]'}`} />
+            <Wallet className={`w-5 h-5 ${currentTab === 'rewards' ? 'stroke-[2.5px] text-[#12285C]' : 'stroke-2 text-[#64748B]'}`} />
           </div>
-          <span className="text-[11px] mt-0.5 leading-tight font-extrabold truncate max-w-full">{t('rewards')}</span>
+          <span className="text-[11px] mt-0.5 leading-tight font-extrabold truncate max-w-full">{t('wallet')}</span>
         </button>
 
         {/* 5. Profile */}
