@@ -137,14 +137,22 @@ export default function App() {
 
   return (
     <LayoutSwitch mobileView={<MobileShell />}>
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-[#060D0E] text-slate-100">
         {view !== 'payment' && (
           <Header view={view} onNavigate={navigateTo} onCreate={handleCreate} />
         )}
 
-        <main className={`${view === 'payment' ? '' : 'md:ml-[258px]'} pb-16 md:pb-0`}>
+        <main className={`${view === 'payment' ? '' : 'md:ml-[220px] pt-[68px]'} pb-16 md:pb-0`}>
           {view === 'home' && (
-            <HomeView onSplitClick={handleSplitClick} onCreate={handleCreate} />
+            <HomeView
+              onSplitClick={handleSplitClick}
+              onCreate={handleCreate}
+              onNavigateQuickAction={(action) => {
+                if (action === 'control') setView('control');
+                else if (action === 'payLink') setView('create');
+                else if (action === 'birthday' || action === 'michango') setView('create');
+              }}
+            />
           )}
 
           {view === 'activity' && (
@@ -196,9 +204,9 @@ export default function App() {
         </main>
 
         {view !== 'payment' && (
-          <footer className="border-t border-slate-200 mt-12 py-6 md:ml-[258px]">
+          <footer className="border-t border-slate-800/80 mt-12 py-6 md:ml-[220px] bg-[#060D0E]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
                 <p>LUMO Split coordinates split obligations. Regulated payment providers execute payments.</p>
                 <p>Tanzania-first · Mobile-money & bank payment ecosystem</p>
               </div>

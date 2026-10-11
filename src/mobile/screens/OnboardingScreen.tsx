@@ -7,32 +7,42 @@ import {
   Sparkles,
   Users,
   Lock,
-  Check
+  Check,
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import { getTranslation, type Language } from '@/lib/i18n';
+import { SixBoxOtpInput } from '@/components/SixBoxOtpInput';
 
-interface OnboardingScreenProps {
+export interface OnboardingScreenProps {
   onComplete: () => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  initialPhone?: string;
+  initialStep?: OnboardingStep;
+  onBackToPhoneCheck?: () => void;
 }
 
-type OnboardingStep = 'carousel' | 'language' | 'phone' | 'otp' | 'name' | 'pin' | 'biometric';
+export type OnboardingStep = 'carousel' | 'language' | 'phone' | 'otp' | 'name' | 'pin' | 'biometric';
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onComplete,
   language,
-  onLanguageChange
+  onLanguageChange,
+  initialPhone,
+  initialStep,
+  onBackToPhoneCheck
 }) => {
-  const [step, setStep] = useState<OnboardingStep>('carousel');
+  const [step, setStep] = useState<OnboardingStep>(initialStep || 'carousel');
   const [carouselIndex, setCarouselIndex] = useState(0);
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [phone, setPhone] = useState(initialPhone || '');
+  const [otpString, setOtpString] = useState('');
   const [name, setName] = useState('');
   const [pin, setPin] = useState(['', '', '', '']);
   const [confirmPin, setConfirmPin] = useState(['', '', '', '']);
   const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   // Lock body & html background to #060D0E during onboarding to eliminate any white gaps or bars
   useEffect(() => {
@@ -104,30 +114,51 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  const handleSendOtp = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!phone || phone.length < 9) {
       setError('Please enter a valid phone number');
       return;
     }
+    setBusy(true);
     setError('');
-    setStep('otp');
-  };
-
-  const handleOtpChange = (index: number, val: string) => {
-    if (val.length > 1) val = val.slice(-1);
-    const newOtp = [...otp];
-    newOtp[index] = val;
-    setOtp(newOtp);
-
-    if (val && index < 5) {
-      const nextInput = document.getElementById(`otp-input-${index + 1}`);
-      if (nextInput) nextInput.focus();
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, purpose: 'REGISTER' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send verification SMS');
+      setStep('otp');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send SMS');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleVerifyOtp = () => {
-    setStep('name');
+  const handleVerifyOtp = async (codeToVerify?: string) => {
+    const code = (codeToVerify || otpString).trim();
+    if (code.length !== 6) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code, purpose: 'REGISTER' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid verification code');
+      setStep('name');
+    } catch (err: any) {
+      setError(err.message || 'Invalid code. Please try again.');
+      setOtpString('');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleSaveName = (e: React.FormEvent) => {
@@ -140,7 +171,44 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setStep('pin');
   };
 
+  const completeRegistration = async (finalPin: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim() || 'LUMO User',
+          phone: phone.trim(),
+          passcode: finalPin
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+      localStorage.setItem('lumo_authenticated', 'true');
+      localStorage.setItem('lumo_onboarded', 'true');
+      localStorage.setItem('lumo_user_name', data.user?.name || name);
+      localStorage.setItem('lumo_user_phone', data.user?.phone || phone);
+      if (data.token) localStorage.setItem('lumo_user_token', data.token);
+      if (data.user) localStorage.setItem('lumo_user', JSON.stringify(data.user));
+
+      window.dispatchEvent(new Event('lumo-auth-changed'));
+      setStep('biometric');
+    } catch (err: any) {
+      setError(err.message || 'Could not complete registration. Please try again.');
+      setConfirmPin(['', '', '', '']);
+      setPin(['', '', '', '']);
+      setPinStep('create');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handlePinDigit = (digit: string) => {
+    if (busy) return;
     if (pinStep === 'create') {
       const emptyIdx = pin.findIndex((d) => d === '');
       if (emptyIdx !== -1) {
@@ -164,9 +232,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           const confirmStr = [...confirmPin.slice(0, 3), digit].join('');
           if (pinStr === confirmStr) {
             setError('');
-            setTimeout(() => {
-              setStep('biometric');
-            }, 250);
+            void completeRegistration(confirmStr);
           } else {
             setError('PINs do not match. Try again.');
             setConfirmPin(['', '', '', '']);
@@ -179,6 +245,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const handlePinDelete = () => {
+    if (busy) return;
     if (pinStep === 'create') {
       const lastIdx = pin.map((d, i) => (d !== '' ? i : -1)).filter((i) => i !== -1).pop();
       if (lastIdx !== undefined) {
@@ -198,6 +265,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const finishOnboarding = () => {
     localStorage.setItem('lumo_authenticated', 'true');
+    localStorage.setItem('lumo_onboarded', 'true');
     localStorage.setItem('lumo_user_name', name || 'User');
     localStorage.setItem('lumo_user_phone', phone || '0700000000');
     onComplete();
@@ -485,28 +553,46 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </p>
               </div>
 
-              <div className="flex justify-center space-x-2 pt-2">
-                {otp.map((digit, idx) => (
-                  <input
-                    key={idx}
-                    id={`otp-input-${idx}`}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    className="w-12 h-14 text-center text-xl font-extrabold rounded-xl border-2 border-slate-800 bg-[#0C1518] focus:border-[#00E599] focus:outline-none text-white shadow-inner"
-                  />
-                ))}
+              <div className="pt-2">
+                <SixBoxOtpInput
+                  value={otpString}
+                  onChange={(val) => {
+                    setError('');
+                    setOtpString(val);
+                  }}
+                  onComplete={(code) => {
+                    void handleVerifyOtp(code);
+                  }}
+                  disabled={busy}
+                />
               </div>
+
+              {busy && (
+                <div className="flex items-center justify-center gap-2 text-xs font-bold text-[#00E599]">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Verifying code...</span>
+                </div>
+              )}
+
+              {error && <p className="text-rose-400 text-xs font-semibold">{error}</p>}
+
+              <button
+                onClick={() => void handleSendOtp()}
+                disabled={busy}
+                className="text-xs font-bold text-[#00E599] hover:text-[#52ffc2] transition flex items-center justify-center gap-1 mx-auto"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Resend Code via Meseji</span>
+              </button>
             </div>
 
             <div className="pb-2">
               <button
-                onClick={handleVerifyOtp}
-                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => void handleVerifyOtp()}
+                disabled={busy || otpString.length !== 6}
+                className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                <span>{t('verifyCode')}</span>
+                <span>{busy ? 'Verifying...' : t('verifyCode')}</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
               </button>
             </div>

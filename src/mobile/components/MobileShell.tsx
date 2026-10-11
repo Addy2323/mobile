@@ -75,9 +75,9 @@ export const MobileShell: React.FC = () => {
   }
 
   return (
-    <div className="min-h-dvh bg-[#070D18] flex justify-center selection:bg-[#FF6500] selection:text-white font-sans antialiased">
+    <div className="min-h-dvh bg-[#060D0E] flex justify-center selection:bg-[#00E599] selection:text-[#060D0E] font-sans antialiased">
       {/* Mobile container - centered 560px on tablets/iPad, 100% on phone */}
-      <div className="w-full max-w-[560px] min-h-dvh bg-slate-50 flex flex-col relative shadow-2xl overflow-x-hidden border-x border-slate-900/20">
+      <div className="w-full max-w-[560px] min-h-dvh bg-[#060D0E] text-slate-100 flex flex-col relative shadow-2xl overflow-x-hidden border-x border-slate-800/60">
         
         {/* Top App Bar (visible on main views) - header seamlessly blends status bar */}
         {activeView === 'main' && (

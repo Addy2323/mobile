@@ -153,26 +153,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Quick Action Tile Grid */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Quick Services
           </h3>
-          <span className="text-[11px] text-slate-400 font-semibold">5 Instant Actions</span>
+          <span className="text-[11px] text-slate-500 font-semibold">5 Instant Actions</span>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           {/* Split a Bill */}
           <button
             onClick={onCreate}
-            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
+            className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group shadow-md"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-orange-50 text-orange-600 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                <Plus className="w-5 h-5 stroke-[2.5]" />
+              <div className="p-2.5 bg-[#0A2620] text-[#00E599] border border-[#00E599]/20 rounded-xl group-hover:bg-[#00E599] group-hover:text-[#05110E] transition-colors">
+                <Plus className="w-5 h-5 stroke-[2.8]" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#00E599] transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-slate-900 text-xs">Split a Bill</h4>
+              <h4 className="font-extrabold text-white text-xs">Split a Bill</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">Dining & shared expenses</p>
             </div>
           </button>
@@ -180,16 +180,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Pay Link */}
           <button
             onClick={() => onNavigateQuickAction?.('payLink')}
-            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
+            className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group shadow-md"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div className="p-2.5 bg-[#0D1F2D] text-cyan-400 border border-cyan-500/20 rounded-xl group-hover:bg-cyan-400 group-hover:text-[#05110E] transition-colors">
                 <LinkIcon className="w-5 h-5" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-slate-900 text-xs">Pay via Link</h4>
+              <h4 className="font-extrabold text-white text-xs">Pay via Link</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">Share & collect instantly</p>
             </div>
           </button>
@@ -197,16 +197,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Birthday */}
           <button
             onClick={() => onNavigateQuickAction?.('birthday')}
-            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
+            className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group shadow-md"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <div className="p-2.5 bg-[#1E112A] text-purple-400 border border-purple-500/20 rounded-xl group-hover:bg-purple-400 group-hover:text-[#05110E] transition-colors">
                 <Gift className="w-5 h-5" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-purple-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-purple-400 transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-slate-900 text-xs">Birthday Pool</h4>
+              <h4 className="font-extrabold text-white text-xs">Birthday Pool</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">Group gifts & celebrations</p>
             </div>
           </button>
@@ -214,16 +214,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Michango */}
           <button
             onClick={() => onNavigateQuickAction?.('michango')}
-            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
+            className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group shadow-md"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <div className="p-2.5 bg-[#0A2620] text-[#00E599] border border-[#00E599]/20 rounded-xl group-hover:bg-[#00E599] group-hover:text-[#05110E] transition-colors">
                 <Users className="w-5 h-5" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#00E599] transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-slate-900 text-xs">Michango</h4>
+              <h4 className="font-extrabold text-white text-xs">Michango</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">Community & events</p>
             </div>
           </button>
@@ -231,16 +231,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Pay Bill */}
           <button
             onClick={() => onNavigateQuickAction?.('control')}
-            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
+            className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group shadow-md"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl group-hover:bg-amber-600 group-hover:text-white transition-colors">
+              <div className="p-2.5 bg-[#251A0B] text-amber-400 border border-amber-500/20 rounded-xl group-hover:bg-amber-400 group-hover:text-[#05110E] transition-colors">
                 <ReceiptText className="w-5 h-5" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-amber-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-slate-900 text-xs">Pay Bills</h4>
+              <h4 className="font-extrabold text-white text-xs">Pay Bills</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">LUKU, DAWASA & Control No.</p>
             </div>
           </button>
@@ -250,14 +250,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Recent Activity Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Recent Split Activity
           </h3>
 
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center space-x-1 text-xs text-indigo-600 font-bold hover:text-indigo-700 active:scale-95 transition-all"
+            className="flex items-center space-x-1 text-xs text-[#00E599] font-bold hover:text-[#52ffc2] active:scale-95 transition-all"
           >
             <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
             <span>{refreshing ? 'Updating...' : 'Refresh'}</span>
@@ -275,10 +275,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {receivedPayments.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+                  <span className="text-[11px] font-bold text-[#00E599] uppercase tracking-wider">
                     Incoming Contributions & Links
                   </span>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full border border-emerald-100">
+                  <span className="text-[10px] bg-[#0A2620] text-[#00E599] font-extrabold px-2 py-0.5 rounded-full border border-[#00E599]/30">
                     +{receivedPayments.length} credited
                   </span>
                 </div>
@@ -286,16 +286,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 {receivedPayments.map((p) => (
                   <div
                     key={p.id}
-                    className="bg-white p-3.5 rounded-2xl border border-emerald-100 shadow-xs flex items-center justify-between"
+                    className="bg-[#0C1518] p-3.5 rounded-2xl border border-slate-800 shadow-md flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                      <div className="w-9 h-9 rounded-xl bg-[#0A2620] text-[#00E599] flex items-center justify-center font-bold text-sm">
                         💰
                       </div>
                       <div>
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-extrabold text-slate-900 text-xs">{p.payer_name}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold uppercase">
+                          <span className="font-extrabold text-white text-xs">{p.payer_name}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#0A2620] text-[#00E599] font-bold uppercase border border-[#00E599]/20">
                             {p.link_type?.replace('_', ' ')}
                           </span>
                         </div>
@@ -306,8 +306,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-black text-emerald-600 block">+{formatMoney(Number(p.amount))}</span>
-                      <span className="text-[9px] text-slate-400 font-mono">{p.provider_tx_ref}</span>
+                      <span className="text-xs font-black text-[#00E599] block">+{formatMoney(Number(p.amount))}</span>
+                      <span className="text-[9px] text-slate-500 font-mono">{p.provider_tx_ref}</span>
                     </div>
                   </div>
                 ))}
@@ -316,19 +316,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
             {/* Splits Activity */}
             {splits.length === 0 && receivedPayments.length === 0 ? (
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center space-y-3">
-                <Zap className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="bg-[#0C1518] p-8 rounded-3xl border border-slate-800 text-center space-y-3">
+                <Zap className="w-8 h-8 text-[#00E599]/60 mx-auto" />
                 <div className="space-y-1">
-                  <p className="text-sm font-bold text-slate-700">No active splits yet</p>
+                  <p className="text-sm font-bold text-white">No active splits yet</p>
                   <p className="text-xs text-slate-400">
                     Create a split or share a payment link to get started!
                   </p>
                 </div>
                 <button
                   onClick={onCreate}
-                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl active:scale-95 transition-all inline-flex items-center space-x-1.5"
+                  className="px-4 py-2.5 bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] text-xs font-extrabold rounded-full active:scale-95 transition-all inline-flex items-center space-x-1.5 shadow-[0_0_15px_rgba(0,229,153,0.3)]"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
                   <span>Create First Split</span>
                 </button>
               </div>
@@ -338,12 +338,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <div
                     key={split.id}
                     onClick={() => onSplitClick(split)}
-                    className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer space-y-2.5"
+                    className="bg-[#0C1518] p-4 rounded-2xl border border-slate-800 hover:border-[#00E599]/40 active:scale-[0.99] transition-all cursor-pointer space-y-2.5 shadow-md"
                   >
                     <div className="flex items-start justify-between">
                       <div className="space-y-0.5 min-w-0 pr-2">
                         <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-slate-900 text-sm truncate">
+                          <span className="font-extrabold text-white text-sm truncate">
                             {split.title}
                           </span>
                         </div>
@@ -355,12 +355,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       <StatusBadge status={split.status as any} />
                     </div>
 
-                    <div className="space-y-1.5 pt-1 border-t border-slate-100/80">
+                    <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
                       <div className="flex justify-between items-center text-xs">
-                        <span className="font-extrabold text-slate-900">
+                        <span className="font-extrabold text-white">
                           {formatMoney(split.total_amount)}
                         </span>
-                        <span className="font-bold text-emerald-600">
+                        <span className="font-bold text-[#00E599]">
                           {formatMoney(split.amount_paid)} paid ({split.settlement_percent || 0}%)
                         </span>
                       </div>
