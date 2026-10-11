@@ -10,6 +10,7 @@ import { SettlementRouter } from './settlementRouter.js';
 import { ApplicationIntegrationService } from './applicationIntegrationService.js';
 import { SnippeReconciliationJob } from './reconciliationJob.js';
 import { createAdminRouter } from './adminRoutes.js';
+import { createAuthRouter } from './authRoutes.js';
 import { LedgerService, calculateVipTier } from './ledgerService.js';
 
 dotenv.config();
@@ -32,6 +33,32 @@ async function autoMigrateOnStartup(p) {
     console.log('[Auto-Migrate] Checking and ensuring database schema compliance...');
     await p.query(`
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone VARCHAR(32) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL DEFAULT 'LUMO Member',
+        email VARCHAR(255),
+        passcode_hash VARCHAR(255) NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+        account_type VARCHAR(32) NOT NULL DEFAULT 'USER',
+        last_login_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS otp_verifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone VARCHAR(32) NOT NULL,
+        code VARCHAR(16) NOT NULL,
+        purpose VARCHAR(32) NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        is_verified BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+      CREATE INDEX IF NOT EXISTS idx_otp_phone_code ON otp_verifications(phone, code);
 
       CREATE TABLE IF NOT EXISTS user_balances (
         user_id VARCHAR(128) PRIMARY KEY,
@@ -167,6 +194,9 @@ app.use(express.json());
 
 // Mount Admin API Router
 app.use('/api/admin', createAdminRouter(pool));
+
+// Mount User Authentication & SMS OTP Router
+app.use('/api/auth', createAuthRouter(pool));
 
 // Block money-moving and destructive legacy routes unless the admin key is sent
 const safeEq = (x, y) => {

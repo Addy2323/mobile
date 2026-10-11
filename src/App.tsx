@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Header, { type View } from '@/components/Header';
 import HomeView from '@/views/HomeView';
 import CreateView from '@/views/CreateView';
@@ -36,9 +36,40 @@ export default function App() {
 
   const publicToken = getPublicToken();
   const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('lumo_authenticated') === 'true');
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockReason, setLockReason] = useState('');
   const [view, setView] = useState<View>('home');
   const [activeSplit, setActiveSplit] = useState<Split | null>(null);
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
+
+  // 60-second inactivity session lock
+  useEffect(() => {
+    if (!authenticated) return;
+
+    let timer: NodeJS.Timeout;
+
+    const resetIdleTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        console.log('[LUMO Session] 60s idle threshold reached. Locking active session.');
+        setIsLocked(true);
+        setLockReason('Session locked due to 60s inactivity. Enter your passcode to unlock.');
+        setAuthenticated(false);
+      }, 60 * 1000); // 60 seconds
+    };
+
+    // Initialize timer
+    resetIdleTimer();
+
+    // Listen to user interactions
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach((e) => window.addEventListener(e, resetIdleTimer, { passive: true }));
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
+    };
+  }, [authenticated]);
 
   if (publicToken) {
     return (
@@ -82,7 +113,26 @@ export default function App() {
   }
 
   if (!authenticated) {
-    return <LoginView onSuccess={() => setAuthenticated(true)} />;
+    return (
+      <LoginView
+        onSuccess={() => {
+          setIsLocked(false);
+          setLockReason('');
+          setAuthenticated(true);
+        }}
+        isLocked={isLocked}
+        lockReason={lockReason}
+        onLogoutToNewUser={() => {
+          setIsLocked(false);
+          setLockReason('');
+          localStorage.removeItem('lumo_user');
+          localStorage.removeItem('lumo_user_phone');
+          localStorage.removeItem('lumo_user_token');
+          localStorage.removeItem('lumo_owner_id');
+          localStorage.removeItem('lumo_authenticated');
+        }}
+      />
+    );
   }
 
   return (
