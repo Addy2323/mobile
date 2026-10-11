@@ -47,7 +47,7 @@ export type WithdrawalRequest = {
 
 export async function fetchUserCardBalance(): Promise<UserCardBalance> {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/card-balance?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/user/card-balance?user_id=${encodeURIComponent(userId)}`);
   if (!res.ok) {
     throw new Error('Could not fetch card balance');
   }
@@ -56,7 +56,7 @@ export async function fetchUserCardBalance(): Promise<UserCardBalance> {
 
 export async function fetchLedgerTransactions(): Promise<LedgerTransaction[]> {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/ledger-transactions?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/user/ledger-transactions?user_id=${encodeURIComponent(userId)}`);
   if (!res.ok) {
     throw new Error('Could not fetch ledger history');
   }
@@ -65,7 +65,7 @@ export async function fetchLedgerTransactions(): Promise<LedgerTransaction[]> {
 
 export async function initiateDeposit(amount: number, phone: string, provider: string = 'M-Pesa') {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/deposits/initiate`, {
+  const res = await authFetch(`${API_BASE}/user/deposits/initiate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, amount, phone, provider })
@@ -92,14 +92,14 @@ export async function checkDepositStatus(depositRef?: string, providerTxRef?: st
   if (providerTxRef) params.set('provider_tx_ref', providerTxRef);
   if (amount) params.set('amount', amount.toString());
 
-  const res = await fetch(`${API_BASE}/user/deposits/status?${params.toString()}`);
+  const res = await authFetch(`${API_BASE}/user/deposits/status?${params.toString()}`);
   if (!res.ok) throw new Error('Could not verify deposit status');
   return res.json();
 }
 
 export async function requestWithdrawal(amount: number, destinationType: 'MOBILE_MONEY' | 'BANK', destinationDetails: any) {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/withdrawals/request`, {
+  const res = await authFetch(`${API_BASE}/user/withdrawals/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, amount, destination_type: destinationType, destination_details: destinationDetails })
@@ -111,14 +111,14 @@ export async function requestWithdrawal(amount: number, destinationType: 'MOBILE
 
 export async function fetchUserWithdrawals(): Promise<WithdrawalRequest[]> {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/withdrawals?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/user/withdrawals?user_id=${encodeURIComponent(userId)}`);
   if (!res.ok) throw new Error('Could not fetch withdrawal requests');
   return res.json();
 }
 
 export async function executeBillPayment(provider: string, meterNumber: string, amount: number) {
   const userId = getOwnerId();
-  const res = await fetch(`${API_BASE}/user/bill-payments`, {
+  const res = await authFetch(`${API_BASE}/user/bill-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, provider, account_meter_number: meterNumber, amount })
@@ -126,4 +126,11 @@ export async function executeBillPayment(provider: string, meterNumber: string, 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Bill payment failed');
   return data;
+}
+
+function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem('lumo_user_token');
+  const headers = new Headers(init.headers || {});
+  if (token) headers.set('Authorization', 'Bearer ' + token);
+  return fetch(input, { ...init, headers });
 }
