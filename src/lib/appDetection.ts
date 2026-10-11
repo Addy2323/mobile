@@ -57,10 +57,10 @@ export function getDeferredInstallPrompt(): any {
 }
 
 /**
- * Triggers the automatic download of the Android Installer (.apk),
- * and if available, simultaneously invokes the native PWA WebAPK installer prompt.
+ * Triggers the native PWA WebAPK installer prompt if available,
+ * or returns guidance instructions so the app can show the step-by-step installation guide.
  */
-export async function triggerAppInstallation(): Promise<{ success: boolean; method: 'pwa' | 'apk' | 'ios' }> {
+export async function triggerAppInstallation(): Promise<{ success: boolean; method: 'pwa' | 'ios' | 'guide' }> {
   // 1. If native beforeinstallprompt is ready, trigger it
   if (globalDeferredPrompt) {
     try {
@@ -81,19 +81,6 @@ export async function triggerAppInstallation(): Promise<{ success: boolean; meth
     return { success: true, method: 'ios' };
   }
 
-  // 3. Trigger automatic direct download of the APK installer
-  try {
-    const link = document.createElement('a');
-    link.href = '/api/app/download-installer';
-    link.download = 'LumoSplit-Installer.apk';
-    link.setAttribute('target', '_blank');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    return { success: true, method: 'apk' };
-  } catch (err) {
-    console.error('Download trigger error:', err);
-    window.open('/api/app/download-installer', '_blank');
-    return { success: true, method: 'apk' };
-  }
+  // 3. Fallback: guide user to install via Chrome menu (Add to Home screen)
+  return { success: true, method: 'guide' };
 }

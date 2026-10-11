@@ -18,6 +18,7 @@ import {
 import { SixBoxOtpInput } from '@/components/SixBoxOtpInput';
 import { OnboardingScreen } from '@/mobile/screens/OnboardingScreen';
 import { isStandaloneApp, triggerAppInstallation } from '@/lib/appDetection';
+import InstallGuideModal from '@/components/InstallGuideModal';
 
 export type LoginViewProps = {
   onSuccess: () => void;
@@ -96,6 +97,7 @@ export default function LoginView({
   // App Installation & Browser Detection State
   const inStandalone = isStandaloneApp();
   const [showLoginInstallPrompt, setShowLoginInstallPrompt] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [installDownloading, setInstallDownloading] = useState(false);
   const [installDownloadDone, setInstallDownloadDone] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -103,10 +105,14 @@ export default function LoginView({
   const handleInstallClick = async () => {
     setInstallDownloading(true);
     try {
-      await triggerAppInstallation();
-      setInstallDownloadDone(true);
+      const res = await triggerAppInstallation();
+      if (res.method === 'pwa' && res.success) {
+        setInstallDownloadDone(true);
+      } else {
+        setShowInstallGuide(true);
+      }
     } catch (err) {
-      console.error(err);
+      setShowInstallGuide(true);
     } finally {
       setInstallDownloading(false);
     }
@@ -514,13 +520,6 @@ export default function LoginView({
 
         {/* Alerts */}
         <div className="mt-4 space-y-2">
-          {isLocked && (
-            <div className="flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-[#161208] p-3 text-xs text-amber-300">
-              <LockKeyhole className="h-4 w-4 shrink-0 text-amber-400" />
-              <span>{lockReason || 'Session locked due to 60s inactivity. Enter passcode to unlock.'}</span>
-            </div>
-          )}
-
           {error && (
             <div className="flex items-center gap-2 rounded-2xl border border-rose-500/30 bg-[#1C0D11] p-3 text-xs font-semibold text-rose-300 animate-in fade-in">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
@@ -610,10 +609,9 @@ export default function LoginView({
               </p>
             </div>
 
-            {/* Passcode Visual Circles + Eye Toggle */}
-            <div className="relative my-4 flex items-center justify-center gap-3">
+            {/* Passcode Visual Circles (Cleanly centered, no overlapping eye button) */}
+            <div className="my-5 flex items-center justify-center gap-3">
               {[0, 1, 2, 3].map((index) => {
-                const char = digits[index];
                 const hasValue = digits.length > index;
                 return (
                   <div
@@ -624,19 +622,10 @@ export default function LoginView({
                         : 'border-slate-800 bg-[#0C1518] text-transparent'
                     }`}
                   >
-                    {hasValue ? (showPasscode ? char : '●') : ''}
+                    {hasValue ? '●' : ''}
                   </div>
                 );
               })}
-
-              <button
-                type="button"
-                onClick={() => setShowPasscode(!showPasscode)}
-                className="absolute right-4 flex h-9 w-9 items-center justify-center rounded-full border border-slate-800 bg-[#0C1518] text-slate-400 transition hover:bg-slate-800 hover:text-white"
-                title={showPasscode ? 'Hide Passcode' : 'Show Passcode'}
-              >
-                {showPasscode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4 text-[#00E599]" />}
-              </button>
             </div>
 
             {/* 3x4 Numeric Keypad */}
@@ -888,17 +877,17 @@ export default function LoginView({
                 {installDownloading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-[#05110E]" />
-                    <span>Inapakua Installer...</span>
+                    <span>Inasakinisha...</span>
                   </>
                 ) : installDownloadDone ? (
                   <>
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Installer Imepakuliwa!</span>
+                    <span>App Imesakinishwa!</span>
                   </>
                 ) : (
                   <>
                     <Download className="w-4 h-4 stroke-[2.5]" />
-                    <span>Install App (Pakua Installer)</span>
+                    <span>Sakinisha App ya LUMO</span>
                   </>
                 )}
               </button>
@@ -913,6 +902,12 @@ export default function LoginView({
           </div>
         </div>
       )}
+
+      {/* PWA Home Screen Installation Guide Modal */}
+      <InstallGuideModal
+        open={showInstallGuide}
+        onClose={() => setShowInstallGuide(false)}
+      />
     </div>
   );
 }

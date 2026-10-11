@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Bell, Globe, ChevronDown, Download } from 'lucide-react';
 import { type Language } from '@/lib/i18n';
 import { isStandaloneApp, triggerAppInstallation } from '@/lib/appDetection';
+import InstallGuideModal from '@/components/InstallGuideModal';
 
 interface TopAppBarProps {
   language: Language;
@@ -16,11 +17,17 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 }) => {
   const [inStandalone] = useState(() => isStandaloneApp());
   const [downloading, setDownloading] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   const handleInstallClick = async () => {
     setDownloading(true);
     try {
-      await triggerAppInstallation();
+      const res = await triggerAppInstallation();
+      if (res.method !== 'pwa' || !res.success) {
+        setShowInstallGuide(true);
+      }
+    } catch {
+      setShowInstallGuide(true);
     } finally {
       setDownloading(false);
     }
@@ -80,6 +87,11 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           <span className="absolute top-2 right-2 w-2 h-2 bg-[#00E599] rounded-full ring-2 ring-[#060D0E] shadow-[0_0_8px_#00E599]" />
         </button>
       </div>
+
+      <InstallGuideModal
+        open={showInstallGuide}
+        onClose={() => setShowInstallGuide(false)}
+      />
     </header>
   );
 };

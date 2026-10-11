@@ -16,6 +16,7 @@ import {
 import { getTranslation, type Language } from '@/lib/i18n';
 import { SixBoxOtpInput } from '@/components/SixBoxOtpInput';
 import { isStandaloneApp, triggerAppInstallation, isIosDevice } from '@/lib/appDetection';
+import InstallGuideModal from '@/components/InstallGuideModal';
 
 export interface OnboardingScreenProps {
   onComplete: () => void;
@@ -48,6 +49,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadDone, setDownloadDone] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const inStandalone = isStandaloneApp();
 
   useEffect(() => {
@@ -57,10 +59,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const handleInstallApp = async () => {
     setDownloading(true);
     try {
-      await triggerAppInstallation();
-      setDownloadDone(true);
+      const res = await triggerAppInstallation();
+      if (res.method === 'pwa' && res.success) {
+        setDownloadDone(true);
+      } else {
+        setShowInstallGuide(true);
+      }
     } catch (err) {
-      console.error(err);
+      setShowInstallGuide(true);
     } finally {
       setDownloading(false);
     }
@@ -835,26 +841,20 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                     {downloading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin text-[#05110E]" />
-                        <span>Inapakua Installer...</span>
+                        <span>Inasakinisha...</span>
                       </>
                     ) : downloadDone ? (
                       <>
                         <Check className="w-4 h-4 stroke-[3]" />
-                        <span>Installer Downloaded!</span>
+                        <span>App Imesakinishwa!</span>
                       </>
                     ) : (
                       <>
                         <Download className="w-4 h-4 stroke-[2.5]" />
-                        <span>Install App (Download Installer)</span>
+                        <span>Sakinisha App ya LUMO</span>
                       </>
                     )}
                   </button>
-
-                  {downloadDone && (
-                    <p className="text-[11px] text-[#00E599] text-center font-medium">
-                      ✓ Angalia folda ya Downloads kwenye simu yako kusakinisha
-                    </p>
-                  )}
                 </div>
               ) : (
                 /* INSTALLED APP DETECTED: No download prompt shown */
@@ -882,6 +882,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
         )}
       </div>
+
+      {/* PWA Home Screen Installation Guide Modal */}
+      <InstallGuideModal
+        open={showInstallGuide}
+        onClose={() => setShowInstallGuide(false)}
+      />
     </div>
   );
 };
