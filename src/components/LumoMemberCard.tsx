@@ -3,10 +3,11 @@ import { Eye, EyeOff, Plus, ArrowUpRight, ShieldCheck, Copy, Check, Award } from
 import { fetchUserCardBalance, UserCardBalance } from '../lib/ledgerApi';
 
 interface LumoMemberCardProps {
-  onOpenDeposit: () => void;
-  onOpenWithdraw: () => void;
-  onOpenVipShowcase: () => void;
+  onOpenDeposit?: () => void;
+  onOpenWithdraw?: () => void;
+  onOpenVipShowcase?: () => void;
   refreshTrigger?: number;
+  showActionsStrip?: boolean;
 }
 
 export const VIP_TIER_STYLES: Record<string, { label: string; textClass: string; badgeClass: string }> = {
@@ -41,7 +42,8 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
   onOpenDeposit,
   onOpenWithdraw,
   onOpenVipShowcase,
-  refreshTrigger = 0
+  refreshTrigger = 0,
+  showActionsStrip = false
 }) => {
   const [balanceData, setBalanceData] = useState<UserCardBalance | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,63 +230,109 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
         </div>
       </div>
 
-      {/* 2. INTEGRATED BALANCE & QUICK ACTION STRIP (Directly below the card) */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Available Balance</span>
-            <button
-              onClick={() => setShowBalance(!showBalance)}
-              className="p-1 rounded text-slate-400 hover:text-white transition-colors"
-            >
-              {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          </div>
+      {/* 2. OPTIONAL ACTION STRIP */}
+      {showActionsStrip && (
+        <LumoBalanceActionsWidget
+          onOpenDeposit={onOpenDeposit}
+          onOpenWithdraw={onOpenWithdraw}
+          onOpenVipShowcase={onOpenVipShowcase}
+          refreshTrigger={refreshTrigger}
+        />
+      )}
+    </div>
+  );
+};
 
-          {/* Tier Tx Counter */}
+export const LumoBalanceActionsWidget: React.FC<{
+  onOpenDeposit?: () => void;
+  onOpenWithdraw?: () => void;
+  onOpenVipShowcase?: () => void;
+  refreshTrigger?: number;
+}> = ({
+  onOpenDeposit,
+  onOpenWithdraw,
+  onOpenVipShowcase,
+  refreshTrigger = 0
+}) => {
+  const [balanceData, setBalanceData] = useState<UserCardBalance | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showBalance, setShowBalance] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchUserCardBalance();
+        if (mounted) setBalanceData(data);
+      } catch (e) {
+        console.warn('Error loading balance widget:', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [refreshTrigger]);
+
+  const tierStyle = balanceData?.tier ? (VIP_TIER_STYLES[balanceData.tier] || VIP_TIER_STYLES.STARTER) : VIP_TIER_STYLES.STARTER;
+
+  return (
+    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-xl backdrop-blur-md space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Balance</span>
           <button
-            onClick={onOpenVipShowcase}
-            className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center space-x-1"
+            onClick={() => setShowBalance(!showBalance)}
+            className="p-1 rounded text-slate-400 hover:text-white transition-colors"
           >
-            <span>{balanceData?.qualifyingTxCount || 0} Txs</span>
-            <span className="text-slate-500">•</span>
-            <span className="text-amber-400 font-bold">{tierStyle.label}</span>
+            {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         </div>
 
-        {/* Balance Amount */}
-        <div className="flex items-baseline space-x-2">
-          <span className="text-xs font-bold text-slate-400">TZS</span>
-          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {loading ? (
-              <span className="animate-pulse">••••••</span>
-            ) : showBalance ? (
-              (balanceData?.availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-            ) : (
-              '••••••••'
-            )}
-          </span>
-        </div>
+        {/* Tier Tx Counter */}
+        <button
+          onClick={onOpenVipShowcase}
+          className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center space-x-1"
+        >
+          <span>{balanceData?.qualifyingTxCount || 0} Txs</span>
+          <span className="text-slate-500">•</span>
+          <span className="text-amber-400 font-bold">{tierStyle.label}</span>
+        </button>
+      </div>
 
-        {/* Action Buttons: Deposit & Withdraw */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <button
-            onClick={onOpenDeposit}
-            className="py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Deposit</span>
-          </button>
+      {/* Balance Amount */}
+      <div className="flex items-baseline space-x-2">
+        <span className="text-xs font-bold text-slate-400">TZS</span>
+        <span className="text-3xl font-black text-white tracking-tight">
+          {loading ? (
+            <span className="animate-pulse">••••••</span>
+          ) : showBalance ? (
+            (balanceData?.availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+          ) : (
+            '••••••••'
+          )}
+        </span>
+      </div>
 
-          <button
-            onClick={onOpenWithdraw}
-            className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
-          >
-            <ArrowUpRight className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
-            <span>Withdraw</span>
-          </button>
-        </div>
+      {/* Action Buttons: Deposit & Withdraw */}
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <button
+          onClick={onOpenDeposit}
+          className="py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
+        >
+          <Plus className="w-4 h-4 stroke-[3]" />
+          <span>Deposit</span>
+        </button>
+
+        <button
+          onClick={onOpenWithdraw}
+          className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm border border-slate-700 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
+        >
+          <ArrowUpRight className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+          <span>Withdraw</span>
+        </button>
       </div>
     </div>
   );

@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Gift, Award, Share2, Copy, Sparkles, Check, ChevronRight } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
+import { LumoBalanceActionsWidget } from '@/components/LumoMemberCard';
+import { DepositModal } from '@/components/DepositModal';
+import { WithdrawModal } from '@/components/WithdrawModal';
+import { VipTierShowcase } from '@/components/VipTierShowcase';
+import { fetchUserCardBalance } from '@/lib/ledgerApi';
 
 interface RewardsScreenProps {
   language: Language;
@@ -9,7 +14,17 @@ interface RewardsScreenProps {
 
 export const RewardsScreen: React.FC<RewardsScreenProps> = ({ language }) => {
   const [copied, setCopied] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showVipShowcase, setShowVipShowcase] = useState(false);
+  const [cardRefreshTrigger, setCardRefreshTrigger] = useState(0);
+  const [currentBalanceData, setCurrentBalanceData] = useState<any | null>(null);
+
   const t = (key: any) => getTranslation(key, language);
+
+  useEffect(() => {
+    fetchUserCardBalance().then(setCurrentBalanceData).catch(() => {});
+  }, [cardRefreshTrigger]);
 
   const referralCode = 'LUMO-GIVEN99';
   const referralLink = `${window.location.origin}/invite?code=${referralCode}`;
@@ -28,6 +43,43 @@ export const RewardsScreen: React.FC<RewardsScreenProps> = ({ language }) => {
 
   return (
     <div className="p-4 space-y-5 no-tap-highlight">
+      {/* 1. LUMO Card Available Balance & Action Strip */}
+      <LumoBalanceActionsWidget
+        onOpenDeposit={() => setShowDepositModal(true)}
+        onOpenWithdraw={() => setShowWithdrawModal(true)}
+        onOpenVipShowcase={() => setShowVipShowcase(true)}
+        refreshTrigger={cardRefreshTrigger}
+      />
+
+      {/* Financial Modals */}
+      {showDepositModal && (
+        <DepositModal
+          onClose={() => setShowDepositModal(false)}
+          onSuccess={() => {
+            setShowDepositModal(false);
+            setCardRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showWithdrawModal && (
+        <WithdrawModal
+          availableBalance={currentBalanceData?.availableBalance || 0}
+          onClose={() => setShowWithdrawModal(false)}
+          onSuccess={() => {
+            setShowWithdrawModal(false);
+            setCardRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showVipShowcase && (
+        <VipTierShowcase
+          currentTier={currentBalanceData?.tier || 'STARTER'}
+          txCount={currentBalanceData?.qualifyingTxCount || 0}
+          onClose={() => setShowVipShowcase(false)}
+        />
+      )}
       {/* Rewards Hero Card */}
       <div className="bg-gradient-to-br from-indigo-700 via-indigo-600 to-purple-800 text-white p-6 rounded-3xl shadow-xl space-y-4 relative overflow-hidden">
         <div className="absolute right-3 top-3 opacity-15">

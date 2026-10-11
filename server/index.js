@@ -156,7 +156,6 @@ app.use((req, res, next) => {
     req.method === 'DELETE' ||
     p.startsWith('/api/payments/webhooks/snippe') ||
     p === '/api/payments/initiate' ||
-    p.startsWith('/api/user/') ||
     (req.method === 'PATCH' && p.startsWith('/api/splits')) ||
     (req.method === 'POST' && (p === '/api/payment-attempts' || p === '/api/audit-logs' || p === '/api/merchants')) ||
     (req.method === 'GET' && (p === '/api/audit-logs' || p === '/api/payment-attempts')) ||
@@ -1609,6 +1608,25 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
             [splitId, totalPaid, payoutRes.payoutId, payoutRes.status]
           );
         }
+      }
+    }
+
+    // Handle DEPOSIT_WALLET payments (LUMO Member Card Deposits)
+    if (metadata.split_id === 'DEPOSIT_WALLET' || metadata.is_deposit) {
+      const depositUserId = metadata.participant_id || 'user_demo_101';
+      const depositAmount = parseInt(eventPayload.data?.amount || eventPayload.amount || '0', 10);
+      if (depositAmount > 0) {
+        console.log(`💳 Confirmed deposit of TZS ${depositAmount} for ${depositUserId}! Crediting user ledger...`);
+        await LedgerService.postCredit(client, {
+          userId: depositUserId,
+          amount: depositAmount,
+          transactionType: 'DEPOSIT',
+          referenceType: 'DEPOSIT',
+          referenceId: providerTxRef || `DEP-${Date.now()}`,
+          providerTxRef: providerTxRef || 'SNP-DEP-CONFIRMED',
+          idempotencyKey: `credit_webhook_${eventId}`,
+          metadata: eventPayload
+        });
       }
     }
 

@@ -20,6 +20,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const userName = localStorage.getItem('lumo_user_name') || 'Given Mhema';
   const userPhone = localStorage.getItem('lumo_user_phone') || '0754 123 456';
   const [showPwaPrompt, setShowPwaPrompt] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallGuideModal, setShowInstallGuideModal] = useState(false);
+
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice?.outcome === 'accepted') {
+        setShowPwaPrompt(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      setShowInstallGuideModal(true);
+    }
+  };
 
   const t = (key: any) => getTranslation(key, language);
 
@@ -148,14 +172,59 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </div>
           </div>
           <button
-            onClick={() => {
-              alert('To install: Tap browser menu and select "Add to Home Screen"');
-              setShowPwaPrompt(false);
-            }}
-            className="px-3 py-1.5 bg-white text-indigo-900 font-extrabold text-xs rounded-xl shadow hover:bg-indigo-50"
+            onClick={handleInstallClick}
+            className="px-3.5 py-1.5 bg-white text-indigo-900 font-extrabold text-xs rounded-xl shadow hover:bg-indigo-50 active:scale-95 transition-all"
           >
             Install
           </button>
+        </div>
+      )}
+
+      {/* PWA Install Guide Modal */}
+      {showInstallGuideModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs">
+                  LS
+                </div>
+                <h3 className="font-extrabold text-slate-900 text-base">Install LUMO App</h3>
+              </div>
+              <button
+                onClick={() => setShowInstallGuideModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Install LUMO Split on your phone for full-screen performance and fast one-tap access:
+            </p>
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs">
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <p className="text-slate-700">Tap browser menu (<strong className="text-slate-900 font-bold">⋮</strong> on Android or <strong className="text-slate-900 font-bold">Share</strong> on iPhone).</p>
+              </div>
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <p className="text-slate-700">Select <strong className="text-slate-900 font-bold">"Add to Home screen"</strong> or <strong className="text-slate-900 font-bold">"Install App"</strong>.</p>
+              </div>
+              <div className="flex items-start space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <p className="text-slate-700">Confirm to launch LUMO with a standalone native app icon.</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInstallGuideModal(false)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xs transition-colors"
+            >
+              Got it, thanks!
+            </button>
+          </div>
         </div>
       )}
 

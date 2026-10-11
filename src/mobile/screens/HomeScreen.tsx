@@ -140,23 +140,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {/* Split a Bill (Primary Action Tile) */}
+          {/* Split a Bill */}
           <button
             onClick={onCreate}
-            className="bg-[#07132B] p-4 rounded-2xl border border-blue-500/30 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group col-span-2 sm:col-span-1"
+            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md active:scale-95 transition-all text-left flex flex-col justify-between space-y-3 group"
           >
             <div className="flex items-center justify-between">
-              <div className="p-2.5 bg-orange-500/20 text-orange-400 rounded-xl border border-orange-500/30 group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                <Plus className="w-5 h-5 stroke-[3]" />
+              <div className="p-2.5 bg-orange-50 text-orange-600 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                <Plus className="w-5 h-5 stroke-[2.5]" />
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-orange-400 transition-colors" />
+              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-600 transition-colors" />
             </div>
             <div>
-              <h4 className="font-extrabold text-white text-sm flex items-center space-x-1.5">
-                <span>Split a Bill</span>
-                <span className="px-1.5 py-0.2 bg-orange-500/30 text-orange-300 text-[9px] rounded font-mono">NEW</span>
-              </h4>
-              <p className="text-[11px] text-slate-300 mt-0.5">Share dining, utilities & group expenses</p>
+              <h4 className="font-extrabold text-slate-900 text-xs">Split a Bill</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">Dining & shared expenses</p>
             </div>
           </button>
 
