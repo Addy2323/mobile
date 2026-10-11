@@ -1,16 +1,19 @@
+import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { smsService, normalizeTzPhone } from './smsService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.ADMIN_KEY || 'lumo_ops_jwt_secure_secret_key_2026';
-const PASSWORD_SALT = process.env.PASSWORD_SALT || 'lumo_passcode_salt_2026_v1';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET (32+ chars) is required');
+const PASSWORD_SALT = process.env.PASSWORD_SALT;
+if (!PASSWORD_SALT) throw new Error('PASSWORD_SALT is required');
 
 /**
  * High-Security Salted Passcode Hashing
  */
 export function hashPasscode(passcode) {
-  return crypto.pbkdf2Sync(String(passcode).trim(), PASSWORD_SALT, 10000, 32, 'sha256').toString('hex');
+  return crypto.pbkdf2Sync(String(passcode).trim(), PASSWORD_SALT, 210000, 32, 'sha256').toString('hex');
 }
 
 export function createAuthRouter(pool) {
@@ -208,7 +211,7 @@ export function createAuthRouter(pool) {
       const token = jwt.sign(
         { id: user.id, phone: user.phone, name: user.name },
         JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '7d' }
       );
 
       res.json({
@@ -275,7 +278,7 @@ export function createAuthRouter(pool) {
       const token = jwt.sign(
         { id: user.id, phone: user.phone, name: user.name },
         JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '7d' }
       );
 
       res.json({

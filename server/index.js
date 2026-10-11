@@ -197,6 +197,24 @@ app.use(express.json());
 app.use('/api/admin', createAdminRouter(pool));
 
 // Mount User Authentication & SMS OTP Router
+// --- Auth abuse protection ---
+const authIpLimit = (windowMs, limit) => rateLimit({ windowMs, limit, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests. Please try again later.' } });
+const phoneHits = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of phoneHits) if (now - v.start > 3600000) phoneHits.delete(k); }, 600000).unref();
+const authPhoneLimit = (name, limit, windowMs) => (req, res, next) => {
+  const phone = String((req.body && req.body.phone) || '').replace(/\D/g, '').slice(-9);
+  if (!phone) return next();
+  const key = name + ':' + phone; const now = Date.now(); const e = phoneHits.get(key);
+  if (!e || now - e.start > windowMs) { phoneHits.set(key, { start: now, n: 1 }); return next(); }
+  if (++e.n > limit) return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+  next();
+};
+app.post('/api/auth/send-otp', authIpLimit(3600000, 10), authPhoneLimit('send', 3, 3600000));
+app.post('/api/auth/verify-otp', authIpLimit(900000, 30), authPhoneLimit('verify', 5, 900000));
+app.post('/api/auth/login-passcode', authIpLimit(900000, 30), authPhoneLimit('login', 5, 900000));
+app.post('/api/auth/reset-passcode', authIpLimit(900000, 30), authPhoneLimit('reset', 5, 900000));
+app.post('/api/auth/register', authIpLimit(900000, 30), authPhoneLimit('register', 5, 900000));
+app.post('/api/auth/check-phone', authIpLimit(900000, 60));
 app.use('/api/auth', createAuthRouter(pool));
 
 // Block money-moving and destructive legacy routes unless the admin key is sent
