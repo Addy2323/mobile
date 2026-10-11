@@ -113,22 +113,22 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
   };
 
   return (
-    <div className="p-4 space-y-5 no-tap-highlight">
+    <div className="p-4 space-y-5 no-tap-highlight min-h-screen bg-[#060D0E] text-white">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <button onClick={onBack} className="p-1.5 -ml-1 text-slate-700 hover:text-slate-900 rounded-full hover:bg-slate-100">
+          <button onClick={onBack} className="p-1.5 -ml-1 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-base font-bold text-slate-900">{t('birthday')} Gift Split</h2>
+          <h2 className="text-base font-bold text-white">{t('birthday')} Gift Split</h2>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
+        <div className="flex bg-[#081214] border border-white/10 p-1 rounded-xl text-xs font-bold">
           <button
             onClick={() => setActiveTab('create')}
             className={`px-3 py-1 rounded-lg transition-all ${
-              activeTab === 'create' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeTab === 'create' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-md' : 'text-white/60 hover:text-white'
             }`}
           >
             + Create
@@ -136,7 +136,7 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
           <button
             onClick={() => setActiveTab('tracker')}
             className={`px-3 py-1 rounded-lg transition-all ${
-              activeTab === 'tracker' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeTab === 'tracker' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-md' : 'text-white/60 hover:text-white'
             }`}
           >
             Tracker
@@ -146,72 +146,72 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
 
       {activeTab === 'create' ? (
         <form onSubmit={handleCreate} className="space-y-4">
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-            <div className="flex items-center space-x-3 pb-2 border-b border-slate-100">
-              <div className="p-3 bg-pink-50 text-pink-600 rounded-2xl">
+          <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-4">
+            <div className="flex items-center space-x-3 pb-3 border-b border-white/10">
+              <div className="p-3 bg-[#00E599]/15 text-[#00E599] rounded-2xl">
                 <Gift className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-sm">Create Group Gift Split</h3>
-                <p className="text-xs text-slate-500">Organize a surprise birthday gift with friends.</p>
+                <h3 className="font-extrabold text-white text-sm">Create Group Gift Split</h3>
+                <p className="text-xs text-white/60">Organize a surprise birthday gift with friends.</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Birthday Person (Recipient)</label>
+                <label className="text-xs font-bold text-white/80 mb-1 block">Birthday Person (Recipient)</label>
                 <input
                   type="text"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   placeholder="e.g. Kelvin, Baraka, Mary"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-pink-600"
+                  className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-bold text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Gift Description / Title</label>
+                <label className="text-xs font-bold text-white/80 mb-1 block">Gift Description / Title</label>
                 <input
                   type="text"
                   value={giftTitle}
                   onChange={(e) => setGiftTitle(e.target.value)}
                   placeholder="e.g. PS5 Controller & Headphones"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sm text-slate-900 focus:outline-none focus:border-pink-600"
+                  className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-semibold text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Target Gift Amount (TZS)</label>
+                <label className="text-xs font-bold text-white/80 mb-1 block">Target Gift Amount (TZS)</label>
                 <input
                   type="number"
                   inputMode="decimal"
                   value={targetAmount}
                   onChange={(e) => setTargetAmount(e.target.value)}
                   placeholder="300000"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg text-slate-900 focus:outline-none focus:border-pink-600"
+                  className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-black text-lg text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                   required
                 />
               </div>
 
               {/* Secret Surprise Toggle */}
-              <div className="p-3.5 bg-pink-50/60 rounded-2xl border border-pink-100 flex items-center justify-between">
+              <div className="p-3.5 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
-                  <EyeOff className="w-5 h-5 text-pink-600" />
+                  <EyeOff className="w-5 h-5 text-[#00E599]" />
                   <div>
-                    <h4 className="font-bold text-slate-900 text-xs">Secret Surprise Mode</h4>
-                    <p className="text-[10px] text-slate-500">Hide contributions from {recipient || 'recipient'}</p>
+                    <h4 className="font-bold text-white text-xs">Secret Surprise Mode</h4>
+                    <p className="text-[10px] text-white/60">Hide contributions from {recipient || 'recipient'}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setHideFromRecipient(!hideFromRecipient)}
                   className={`w-11 h-6 rounded-full transition-colors p-1 flex items-center ${
-                    hideFromRecipient ? 'bg-pink-600 justify-end' : 'bg-slate-200 justify-start'
+                    hideFromRecipient ? 'bg-[#00E599] justify-end' : 'bg-white/20 justify-start'
                   }`}
                 >
-                  <div className="w-4 h-4 rounded-full bg-white shadow-md" />
+                  <div className={`w-4 h-4 rounded-full ${hideFromRecipient ? 'bg-[#060D0E]' : 'bg-white'} shadow-md`} />
                 </button>
               </div>
             </div>
@@ -228,7 +228,7 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg flex items-center justify-center space-x-2 text-sm transition-all disabled:opacity-50"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 flex items-center justify-center space-x-2 text-sm transition-all disabled:opacity-50"
           >
             <Sparkles className="w-4 h-4" />
             <span>{isSubmitting ? 'Creating Pool...' : 'Create Birthday Split & Share'}</span>
@@ -237,18 +237,18 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
       ) : (
         /* ACTIVE TRACKER VIEW */
         <div className="space-y-4">
-          <div className="bg-gradient-to-br from-rose-500 via-pink-600 to-indigo-700 text-white p-6 rounded-3xl shadow-xl space-y-4 relative overflow-hidden">
+          <div className="bg-[#0C181A] border border-[#00E599]/30 text-white p-6 rounded-3xl shadow-xl space-y-4 relative overflow-hidden">
             <div className="relative z-10 space-y-2">
-              <div className="inline-flex items-center px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold space-x-1.5">
-                <Heart className="w-3.5 h-3.5 fill-white" />
+              <div className="inline-flex items-center px-3 py-1 bg-[#00E599]/15 border border-[#00E599]/30 rounded-full text-xs font-bold space-x-1.5 text-[#00E599]">
+                <Heart className="w-3.5 h-3.5 fill-[#00E599]" />
                 <span>{hideFromRecipient ? 'Secret Surprise Gift' : 'Open Birthday Gift'}</span>
               </div>
 
-              <h3 className="text-2xl font-black tracking-tight">{recipient}'s Birthday Split 🎉</h3>
-              <p className="text-rose-100 text-xs">{giftTitle}</p>
+              <h3 className="text-2xl font-black tracking-tight text-white">{recipient}'s Birthday Split 🎉</h3>
+              <p className="text-white/70 text-xs">{giftTitle}</p>
 
               <div className="pt-3">
-                <div className="flex justify-between items-center text-xs font-bold mb-1">
+                <div className="flex justify-between items-center text-xs font-bold mb-1 text-white/80">
                   <span>Goal: {formatMoney(parseFloat(targetAmount) || 300000)}</span>
                   <span>0% Collected</span>
                 </div>
@@ -257,15 +257,15 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
-            <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">Invite Friends to Contribute</h4>
+          <div className="bg-[#0C181A] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+            <h4 className="font-extrabold text-white text-xs uppercase tracking-wider">Invite Friends to Contribute</h4>
             
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(`Contribute to ${recipient}'s Birthday Gift (${giftTitle}): ${generatedLink || window.location.href}`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs"
+                className="py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>WhatsApp</span>
@@ -273,24 +273,24 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
 
               <button
                 onClick={copyLink}
-                className="py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs"
+                className="py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? <Check className="w-4 h-4 text-[#00E599]" /> : <Copy className="w-4 h-4 text-[#00E599]" />}
                 <span>{copied ? 'Copied!' : 'Copy Link'}</span>
               </button>
             </div>
           </div>
 
           {/* Real Contributors Tracker */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+          <div className="bg-[#0C181A] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+              <h4 className="font-extrabold text-white text-xs uppercase tracking-wider">
                 Contributors ({contributors.length})
               </h4>
               <button
                 onClick={() => currentPool && fetchContributors(`BDAY-${currentPool.id.slice(0, 6)}`)}
                 disabled={loadingContributors}
-                className="text-xs font-bold text-pink-600 inline-flex items-center space-x-1"
+                className="text-xs font-bold text-[#00E599] inline-flex items-center space-x-1 hover:brightness-110"
               >
                 <RefreshCw className={`w-3 h-3 ${loadingContributors ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
@@ -298,20 +298,20 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
             </div>
 
             {loadingContributors ? (
-              <div className="text-center py-4 text-xs text-slate-400">Loading contributors...</div>
+              <div className="text-center py-4 text-xs text-white/40">Loading contributors...</div>
             ) : contributors.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">No contributions received yet. Share the link above!</p>
+              <p className="text-xs text-white/40 text-center py-4">No contributions received yet. Share the link above!</p>
             ) : (
               <div className="space-y-2">
                 {contributors.map((c) => (
-                  <div key={c.id} className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100/60 flex items-center justify-between">
+                  <div key={c.id} className="p-3 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">{c.payer_name}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{c.payer_phone}</p>
+                      <p className="font-bold text-white text-xs">{c.payer_name}</p>
+                      <p className="text-[10px] text-white/50 font-mono">{c.payer_phone}</p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-pink-600 text-xs block">+{formatMoney(Number(c.amount))}</span>
-                      <span className="text-[9px] text-slate-400">{new Date(c.created_at).toLocaleDateString()}</span>
+                      <span className="font-black text-[#00E599] text-xs block">+{formatMoney(Number(c.amount))}</span>
+                      <span className="text-[9px] text-white/40">{new Date(c.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 ))}

@@ -563,40 +563,40 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
       {creationType === 'pay_link' && (
         <Panel>
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00E599]/15 text-[#00E599] font-bold">
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">Create Pay Link</h2>
-              <p className="text-xs text-slate-500">Fixed or open amount payment link anyone can pay using M-Pesa / Tigo / Card.</p>
+              <h2 className="text-lg font-extrabold text-white">Create Pay Link</h2>
+              <p className="text-xs text-white/60">Fixed or open amount payment link anyone can pay using M-Pesa / Tigo / Card.</p>
             </div>
           </div>
           <div className="space-y-4">
-            <label className="block text-xs font-bold text-slate-700">Link Title / Purpose
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Design Consulting Fee or Event Ticket" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-amber-400" />
+            <label className="block text-xs font-bold text-white/80">Link Title / Purpose
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Design Consulting Fee or Event Ticket" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-2">Amount Type</label>
+              <label className="block text-xs font-bold text-white/80 mb-2">Amount Type</label>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setPayLinkType('fixed')} className={`p-3 rounded-xl border text-xs font-bold ${payLinkType === 'fixed' ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-slate-200 text-slate-600'}`}>Fixed Amount</button>
-                <button onClick={() => setPayLinkType('open')} className={`p-3 rounded-xl border text-xs font-bold ${payLinkType === 'open' ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-slate-200 text-slate-600'}`}>Open (Payer decides)</button>
+                <button onClick={() => setPayLinkType('fixed')} className={`p-3 rounded-xl border text-xs font-bold transition-all ${payLinkType === 'fixed' ? 'border-[#00E599] bg-[#00E599]/15 text-[#00E599]' : 'border-white/10 bg-[#081214] text-white/70 hover:border-white/20'}`}>Fixed Amount</button>
+                <button onClick={() => setPayLinkType('open')} className={`p-3 rounded-xl border text-xs font-bold transition-all ${payLinkType === 'open' ? 'border-[#00E599] bg-[#00E599]/15 text-[#00E599]' : 'border-white/10 bg-[#081214] text-white/70 hover:border-white/20'}`}>Open (Payer decides)</button>
               </div>
             </div>
             {payLinkType === 'fixed' && (
-              <label className="block text-xs font-bold text-slate-700">Fixed Amount (TZS)
-                <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="50000" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-amber-400" />
+              <label className="block text-xs font-bold text-white/80">Fixed Amount (TZS)
+                <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="50000" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm font-bold text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
               </label>
             )}
-            <label className="block text-xs font-bold text-slate-700">Expiry Date (optional)
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Expiry Date (optional)
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Description / Instructions (optional)
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is this payment for?" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Description / Instructions (optional)
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is this payment for?" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
             <button
               onClick={() => void handleCreateDirect('pay_link', { title: title || 'Pay Link Payment', category: 'other', amount: Number(totalAmount) || 0, note })}
               disabled={creating}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 p-3.5 text-sm font-bold text-white hover:bg-amber-700 transition"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C880] p-3.5 text-sm font-black text-[#060D0E] shadow-lg shadow-[#00E599]/20 hover:brightness-105 active:scale-[0.98] transition disabled:opacity-50"
             >
               {creating ? 'Generating Link...' : 'Create Pay Link & QR Code'} <CheckCircle2 className="h-4 w-4" />
             </button>
@@ -608,41 +608,41 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
       {creationType === 'birthday' && (
         <Panel>
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 font-bold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00E599]/15 text-[#00E599] font-bold">
               <Gift className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">Create Birthday Fund</h2>
-              <p className="text-xs text-slate-500">Collect birthday contributions and private celebration wishes.</p>
+              <h2 className="text-lg font-extrabold text-white">Create Birthday Fund</h2>
+              <p className="text-xs text-white/60">Collect birthday contributions and private celebration wishes.</p>
             </div>
           </div>
           <div className="space-y-4">
-            <label className="block text-xs font-bold text-slate-700">Birthday Person Full Name
-              <input value={birthdayPerson} onChange={(e) => setBirthdayPerson(e.target.value)} placeholder="e.g. Kelvin Mushi's Birthday" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-purple-400" />
+            <label className="block text-xs font-bold text-white/80">Birthday Person Full Name
+              <input value={birthdayPerson} onChange={(e) => setBirthdayPerson(e.target.value)} placeholder="e.g. Kelvin Mushi's Birthday" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Birthday Celebration Date
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Birthday Celebration Date
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Target Gift Goal (TZS)
-              <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="200000" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-purple-400" />
+            <label className="block text-xs font-bold text-white/80">Target Gift Goal (TZS)
+              <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="200000" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm font-bold text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Organizer Wish / Welcome Note
-              <input value={birthdayWish} onChange={(e) => setBirthdayWish(e.target.value)} placeholder="e.g. Let's get Kelvin a nice smartwatch for his 30th!" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Organizer Wish / Welcome Note
+              <input value={birthdayWish} onChange={(e) => setBirthdayWish(e.target.value)} placeholder="e.g. Let's get Kelvin a nice smartwatch for his 30th!" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
             <button
               onClick={() => setBirthdayRevealed(!birthdayRevealed)}
-              className="flex items-center gap-3 text-left p-3 rounded-xl border border-purple-100 bg-purple-50/50"
+              className="flex items-center gap-3 text-left p-3.5 rounded-xl border border-white/10 bg-[#081214] hover:border-white/20 transition-all"
             >
-              <span className={`flex h-5 w-5 items-center justify-center rounded border ${birthdayRevealed ? 'border-purple-600 bg-purple-600 text-white' : 'border-slate-300'}`}>{birthdayRevealed && <Check className="h-3 w-3" />}</span>
+              <span className={`flex h-5 w-5 items-center justify-center rounded border ${birthdayRevealed ? 'border-[#00E599] bg-[#00E599] text-[#060D0E]' : 'border-white/30'}`}>{birthdayRevealed && <Check className="h-3 w-3 stroke-[3]" />}</span>
               <div>
-                <span className="block text-xs font-bold text-purple-950">Secret Birthday Mode</span>
-                <span className="text-[11px] text-purple-700">Hide messages and total collected from recipient until reveal date.</span>
+                <span className="block text-xs font-bold text-white">Secret Birthday Mode</span>
+                <span className="text-[11px] text-white/60">Hide messages and total collected from recipient until reveal date.</span>
               </div>
             </button>
             <button
               onClick={() => void handleCreateDirect('birthday', { title: birthdayPerson || 'Birthday Fund', category: 'gift', amount: Number(totalAmount) || 0, note: birthdayWish })}
               disabled={creating}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-3.5 text-sm font-bold text-white hover:bg-purple-700 transition"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C880] p-3.5 text-sm font-black text-[#060D0E] shadow-lg shadow-[#00E599]/20 hover:brightness-105 active:scale-[0.98] transition disabled:opacity-50"
             >
               {creating ? 'Creating Fund...' : 'Create Birthday Fund & Page'} <CheckCircle2 className="h-4 w-4" />
             </button>
@@ -654,40 +654,40 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
       {creationType === 'michango' && (
         <Panel>
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-50 text-success-600 font-bold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00E599]/15 text-[#00E599] font-bold">
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">Create Michango Campaign</h2>
-              <p className="text-xs text-slate-500">Structured contributions for weddings, send-offs, and community causes.</p>
+              <h2 className="text-lg font-extrabold text-white">Create Michango Campaign</h2>
+              <p className="text-xs text-white/60">Structured contributions for weddings, send-offs, and community causes.</p>
             </div>
           </div>
           <div className="space-y-4">
-            <label className="block text-xs font-bold text-slate-700">Cause Type
-              <select value={michangoCause} onChange={(e) => setMichangoCause(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm">
-                <option value="Wedding / Harusi">Wedding / Harusi</option>
-                <option value="Send-off Party">Send-off Party</option>
-                <option value="Funeral Support / Msiba">Funeral Support / Msiba</option>
-                <option value="Medical Assistance">Medical Assistance</option>
-                <option value="Community Project">Community Project</option>
+            <label className="block text-xs font-bold text-white/80">Cause Type
+              <select value={michangoCause} onChange={(e) => setMichangoCause(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white outline-none focus:border-[#00E599]">
+                <option value="Wedding / Harusi" className="bg-[#081214] text-white">Wedding / Harusi</option>
+                <option value="Send-off Party" className="bg-[#081214] text-white">Send-off Party</option>
+                <option value="Funeral Support / Msiba" className="bg-[#081214] text-white">Funeral Support / Msiba</option>
+                <option value="Medical Assistance" className="bg-[#081214] text-white">Medical Assistance</option>
+                <option value="Community Project" className="bg-[#081214] text-white">Community Project</option>
               </select>
             </label>
-            <label className="block text-xs font-bold text-slate-700">Campaign Title
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Asha & John Wedding Michango" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-success-400" />
+            <label className="block text-xs font-bold text-white/80">Campaign Title
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Asha & John Wedding Michango" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Target Goal (TZS)
-              <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="5000000" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-success-400" />
+            <label className="block text-xs font-bold text-white/80">Target Goal (TZS)
+              <input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="5000000" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm font-bold text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Closing Date
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Closing Date
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white outline-none focus:border-[#00E599]" />
             </label>
-            <label className="block text-xs font-bold text-slate-700">Campaign Description / Details
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Details regarding payout and event" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none" />
+            <label className="block text-xs font-bold text-white/80">Campaign Description / Details
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Details regarding payout and event" className="mt-1 w-full rounded-xl border border-white/10 bg-[#081214] p-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#00E599]" />
             </label>
             <button
               onClick={() => void handleCreateDirect('michango', { title: title || `${michangoCause} Michango`, category: 'event', amount: Number(totalAmount) || 0, note: `${michangoCause}: ${note}` })}
               disabled={creating}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-success-600 p-3.5 text-sm font-bold text-white hover:bg-success-700 transition"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C880] p-3.5 text-sm font-black text-[#060D0E] shadow-lg shadow-[#00E599]/20 hover:brightness-105 active:scale-[0.98] transition disabled:opacity-50"
             >
               {creating ? 'Creating Campaign...' : 'Launch Michango Campaign'} <CheckCircle2 className="h-4 w-4" />
             </button>
@@ -863,20 +863,20 @@ function QrScannerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-4 animate-fade-in">
-      <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-up border border-slate-100 text-center flex flex-col items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+      <div className="w-full max-w-sm rounded-3xl bg-[#0C181A] p-6 shadow-2xl animate-scale-up border border-white/10 text-center flex flex-col items-center text-white">
         {/* Header */}
-        <div className="flex w-full items-center justify-between pb-4 border-b border-slate-100">
+        <div className="flex w-full items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center gap-2.5 text-left">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-100 text-primary-700 shadow-xs">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#00E599]/15 text-[#00E599] shadow-xs">
               <Camera className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-black text-slate-950">Scan Payment QR Code</h3>
-              <p className="text-[10px] font-medium text-slate-500">Auto-Detecting Live Feed</p>
+              <h3 className="text-sm font-black text-white">Scan Payment QR Code</h3>
+              <p className="text-[10px] font-medium text-white/50">Auto-Detecting Live Feed</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
+          <button onClick={onClose} className="rounded-xl p-2 text-white/50 hover:bg-white/10 hover:text-white transition">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -884,7 +884,7 @@ function QrScannerModal({
         {/* Real WebRTC Viewfinder Box */}
         <div
           onClick={() => processPayload('68119496')}
-          className="mt-6 relative w-full aspect-square max-w-[260px] mx-auto rounded-2xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden border-2 border-slate-800 shadow-2xl cursor-pointer group"
+          className="mt-6 relative w-full aspect-square max-w-[260px] mx-auto rounded-2xl bg-[#060D0E] flex flex-col items-center justify-center overflow-hidden border-2 border-white/10 shadow-2xl cursor-pointer group"
         >
           {/* Live Video Stream */}
           <video
@@ -897,8 +897,8 @@ function QrScannerModal({
 
           {/* Detection Success Flash */}
           {detectedValue && (
-            <div className="absolute inset-0 bg-emerald-600/90 z-30 flex flex-col items-center justify-center text-white animate-fade-in">
-              <CheckCircle2 className="h-12 w-12 text-white animate-bounce" />
+            <div className="absolute inset-0 bg-[#00E599]/90 z-30 flex flex-col items-center justify-center text-[#060D0E] animate-fade-in font-black">
+              <CheckCircle2 className="h-12 w-12 text-[#060D0E] animate-bounce" />
               <p className="mt-2 text-xs font-black">QR Detected!</p>
               <p className="text-sm font-mono font-extrabold">{detectedValue}</p>
             </div>
@@ -907,32 +907,32 @@ function QrScannerModal({
           {/* Camera Loading / Fallback Indicator */}
           {!cameraActive && !detectedValue && (
             <div className="z-10 flex flex-col items-center px-4 text-center">
-              <Camera className="h-8 w-8 text-slate-500 animate-pulse mb-2" />
-              <p className="text-xs font-bold text-slate-300">{cameraError ? 'Camera Access Required' : 'Starting camera...'}</p>
-              {cameraError && <p className="text-[10px] text-slate-500 mt-1 max-w-[200px]">{cameraError}</p>}
+              <Camera className="h-8 w-8 text-white/40 animate-pulse mb-2" />
+              <p className="text-xs font-bold text-white/70">{cameraError ? 'Camera Access Required' : 'Starting camera...'}</p>
+              {cameraError && <p className="text-[10px] text-white/40 mt-1 max-w-[200px]">{cameraError}</p>}
             </div>
           )}
 
           {/* Corner Framing Brackets */}
-          <div className="absolute top-3 left-3 h-6 w-6 border-t-2 border-l-2 border-primary-400 rounded-tl-md z-20" />
-          <div className="absolute top-3 right-3 h-6 w-6 border-t-2 border-r-2 border-primary-400 rounded-tr-md z-20" />
-          <div className="absolute bottom-3 left-3 h-6 w-6 border-b-2 border-l-2 border-primary-400 rounded-bl-md z-20" />
-          <div className="absolute bottom-3 right-3 h-6 w-6 border-b-2 border-r-2 border-primary-400 rounded-br-md z-20" />
+          <div className="absolute top-3 left-3 h-6 w-6 border-t-2 border-l-2 border-[#00E599] rounded-tl-md z-20" />
+          <div className="absolute top-3 right-3 h-6 w-6 border-t-2 border-r-2 border-[#00E599] rounded-tr-md z-20" />
+          <div className="absolute bottom-3 left-3 h-6 w-6 border-b-2 border-l-2 border-[#00E599] rounded-bl-md z-20" />
+          <div className="absolute bottom-3 right-3 h-6 w-6 border-b-2 border-r-2 border-[#00E599] rounded-br-md z-20" />
 
           {/* Laser Scanner Line */}
           <div className="absolute inset-x-3 top-0 bottom-0 pointer-events-none flex flex-col justify-center z-20">
-            <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-primary-400 to-transparent shadow-md shadow-primary-400/80 animate-pulse" />
+            <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-[#00E599] to-transparent shadow-md shadow-[#00E599]/80 animate-pulse" />
           </div>
 
           {/* Tap-to-Scan Frame Overlay hint */}
-          <div className="absolute bottom-2 inset-x-2 z-20 bg-slate-900/80 backdrop-blur-xs py-1 px-2 rounded-lg opacity-0 group-hover:opacity-100 transition text-[9px] font-extrabold text-primary-300">
+          <div className="absolute bottom-2 inset-x-2 z-20 bg-black/80 backdrop-blur-xs py-1 px-2 rounded-lg opacity-0 group-hover:opacity-100 transition text-[9px] font-extrabold text-[#00E599]">
             Click frame to capture code (e.g. 68119496)
           </div>
         </div>
 
         {/* Status Indicator */}
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-[#00E599] bg-[#00E599]/10 px-3 py-1.5 rounded-full border border-[#00E599]/30">
+          <span className="h-2 w-2 rounded-full bg-[#00E599] animate-ping" />
           <span>Real-time QR auto-detector active</span>
         </div>
       </div>
@@ -1398,33 +1398,33 @@ function ShareView({ split, merchant, shareLink, copied, onCopy, onComplete }: {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-12 animate-slide-up">
+    <div className="mx-auto max-w-2xl px-4 py-12 animate-slide-up text-white">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-success-500 text-white shadow-lg shadow-success-500/25">
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-[#00E599]/20 text-[#00E599] border border-[#00E599]/40 shadow-lg shadow-[#00E599]/20">
           <CheckCircle2 className="h-10 w-10" />
         </div>
-        <h1 className="text-2xl font-extrabold text-slate-950">Split created</h1>
-        <p className="mt-2 text-slate-500">Share the link so everyone can pay their share.</p>
-        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-800">
-          <Smartphone className="h-3.5 w-3.5 text-emerald-600" />
+        <h1 className="text-2xl font-extrabold text-white">Split created</h1>
+        <p className="mt-2 text-white/60">Share the link so everyone can pay their share.</p>
+        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#00E599]/30 bg-[#00E599]/10 px-3.5 py-1 text-xs font-bold text-[#00E599]">
+          <Smartphone className="h-3.5 w-3.5 text-[#00E599]" />
           SMS invites dispatched to participants via Meseji
         </div>
       </div>
-      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-5">
-          <Receipt className="h-6 w-6 text-slate-500" />
+      <div className="rounded-3xl border border-white/10 bg-[#0C181A] p-6 shadow-2xl">
+        <div className="flex items-center gap-3 border-b border-white/10 pb-5">
+          <Receipt className="h-6 w-6 text-white/60" />
           <div className="flex-1">
-            <p className="font-bold text-slate-900">{split.title}</p>
-            <p className="text-xs text-slate-400">{merchant?.display_name || 'Verified destination'} · {formatMoney(split.total_amount)}</p>
+            <p className="font-bold text-white">{split.title}</p>
+            <p className="text-xs text-white/50">{merchant?.display_name || 'Verified destination'} · {formatMoney(split.total_amount)}</p>
           </div>
         </div>
         <div className="mt-5 flex flex-col items-center">
-          <div className="qr-placeholder">
-            <QrCode className="h-20 w-20 text-slate-950" />
+          <div className="p-3 bg-white rounded-2xl shadow-inner">
+            <QrCode className="h-20 w-20 text-[#060D0E]" />
           </div>
-          <p className="mt-4 break-all rounded-lg bg-slate-50 px-3 py-2 text-center font-mono text-xs text-slate-600">{shareLink}</p>
-          <button onClick={onCopy} className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700">
-            {copied ? <Check className="h-4 w-4 text-success-600" /> : <Copy className="h-4 w-4" />}
+          <p className="mt-4 break-all rounded-xl bg-[#081214] border border-white/10 px-3 py-2 text-center font-mono text-xs text-white/80">{shareLink}</p>
+          <button onClick={onCopy} className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 text-xs font-bold text-white transition">
+            {copied ? <Check className="h-4 w-4 text-[#00E599]" /> : <Copy className="h-4 w-4" />}
             {copied ? 'Copied' : 'Copy link'}
           </button>
         </div>
@@ -1433,14 +1433,14 @@ function ShareView({ split, merchant, shareLink, copied, onCopy, onComplete }: {
             href={`https://wa.me/?text=${encodeURIComponent(`Habari! Umeongezwa kwenye bili ya ${split.title} kwenye LUMO Split. Lipa sehemu yako hapa: https://${shareLink}`)}`}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-xs font-bold text-white hover:bg-[#20ba5c] transition"
+            className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-xs font-black text-white hover:bg-[#20ba5c] transition"
           >
             <MessageCircle className="h-4 w-4" /> WhatsApp
           </a>
           <button
             onClick={handleSendSms}
             disabled={smsSending}
-            className="flex items-center justify-center gap-2 rounded-lg bg-slate-950 py-3 text-xs font-bold text-white hover:bg-slate-800 transition"
+            className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 py-3 text-xs font-bold text-white transition"
           >
             <Smartphone className="h-4 w-4" /> {smsSending ? 'Sending...' : smsSent ? 'SMS Resent ✓' : 'Resend SMS'}
           </button>
@@ -1449,7 +1449,7 @@ function ShareView({ split, merchant, shareLink, copied, onCopy, onComplete }: {
       <div className="mt-5">
         <TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} />
       </div>
-      <button onClick={onComplete} className="mt-5 w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white">View split details</button>
+      <button onClick={onComplete} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] py-3.5 text-sm font-black text-[#060D0E] shadow-lg shadow-[#00E599]/20 transition">View split details</button>
     </div>
   );
 }

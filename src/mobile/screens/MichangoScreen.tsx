@@ -125,22 +125,22 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
   const totalTarget = parseFloat(targetAmount) || 2000000;
 
   return (
-    <div className="p-4 space-y-5 no-tap-highlight">
+    <div className="p-4 space-y-5 no-tap-highlight min-h-screen bg-[#060D0E] text-white">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <button onClick={onBack} className="p-1.5 -ml-1 text-slate-700 hover:text-slate-900 rounded-full hover:bg-slate-100">
+          <button onClick={onBack} className="p-1.5 -ml-1 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-base font-bold text-slate-900">{t('michango')} Tracker</h2>
+          <h2 className="text-base font-bold text-white">{t('michango')} Tracker</h2>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
+        <div className="flex bg-[#081214] border border-white/10 p-1 rounded-xl text-xs font-bold">
           <button
             onClick={() => setActiveTab('create')}
             className={`px-3 py-1 rounded-lg transition-all ${
-              activeTab === 'create' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeTab === 'create' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-md' : 'text-white/60 hover:text-white'
             }`}
           >
             + Create
@@ -148,7 +148,7 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
           <button
             onClick={() => setActiveTab('tracker')}
             className={`px-3 py-1 rounded-lg transition-all ${
-              activeTab === 'tracker' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeTab === 'tracker' ? 'bg-[#00E599] text-[#060D0E] font-black shadow-md' : 'text-white/60 hover:text-white'
             }`}
           >
             Campaigns
@@ -158,20 +158,20 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
 
       {activeTab === 'create' ? (
         <form onSubmit={handleCreate} className="space-y-4">
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-            <div className="flex items-center space-x-3 pb-2 border-b border-slate-100">
-              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+          <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-4">
+            <div className="flex items-center space-x-3 pb-3 border-b border-white/10">
+              <div className="p-3 bg-[#00E599]/15 text-[#00E599] rounded-2xl">
                 <HeartHandshake className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-sm">Create Michango Campaign</h3>
-                <p className="text-xs text-slate-500">Collect pledges and payments for community causes.</p>
+                <h3 className="font-extrabold text-white text-sm">Create Michango Campaign</h3>
+                <p className="text-xs text-white/60">Collect pledges and payments for community causes.</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Fundraiser Category</label>
+                <label className="text-xs font-bold text-white/80 mb-1 block">Fundraiser Category</label>
                 <div className="flex flex-wrap gap-2">
                   {categories.map((c) => (
                     <button
@@ -180,8 +180,8 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
                       onClick={() => setCategory(c.name)}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         category === c.name
-                          ? 'bg-amber-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          ? 'bg-[#00E599] text-[#060D0E] font-black shadow-sm'
+                          : 'bg-[#081214] border border-white/10 text-white/70 hover:bg-white/10'
                       }`}
                     >
                       {c.name} ({c.label})
@@ -191,40 +191,40 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Campaign Title</label>
+                <label className="text-xs font-bold text-white/80 mb-1 block">Campaign Title</label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Harusi ya Baraka & Mary"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-amber-600"
+                  className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-bold text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-600 mb-1 block">Target Goal (TZS)</label>
+                  <label className="text-xs font-bold text-white/80 mb-1 block">Target Goal (TZS)</label>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={targetAmount}
                     onChange={(e) => setTargetAmount(e.target.value)}
                     placeholder="2000000"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 focus:outline-none focus:border-amber-600"
+                    className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-black text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-600 mb-1 block">Pledge / Person</label>
+                  <label className="text-xs font-bold text-white/80 mb-1 block">Pledge / Person</label>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={suggestedPledge}
                     onChange={(e) => setSuggestedPledge(e.target.value)}
                     placeholder="100000"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-amber-600"
+                    className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-bold text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                   />
                 </div>
               </div>
@@ -242,7 +242,7 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg flex items-center justify-center space-x-2 text-sm transition-all disabled:opacity-50"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 flex items-center justify-center space-x-2 text-sm transition-all disabled:opacity-50"
           >
             <Sparkles className="w-4 h-4" />
             <span>{isSubmitting ? 'Launching...' : 'Launch Campaign & Share'}</span>
@@ -251,19 +251,19 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
       ) : (
         /* ACTIVE CAMPAIGN TRACKER VIEW */
         <div className="space-y-4">
-          <div className="bg-gradient-to-br from-amber-500 via-orange-600 to-indigo-700 text-white p-6 rounded-3xl shadow-xl space-y-4">
-            <div className="flex items-center space-x-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold w-fit">
+          <div className="bg-[#0C181A] border border-[#00E599]/30 text-white p-6 rounded-3xl shadow-xl space-y-4">
+            <div className="flex items-center space-x-2 bg-[#00E599]/15 border border-[#00E599]/30 px-3 py-1 rounded-full text-xs font-bold w-fit text-[#00E599]">
               <HeartHandshake className="w-3.5 h-3.5" />
               <span>{category} Fundraiser</span>
             </div>
 
             <div>
-              <h3 className="text-2xl font-black">{currentEvent?.title || title}</h3>
-              <p className="text-amber-100 text-xs mt-0.5">Target: {formatMoney(Number(currentEvent?.target_amount || totalTarget))}</p>
+              <h3 className="text-2xl font-black text-white">{currentEvent?.title || title}</h3>
+              <p className="text-white/70 text-xs mt-0.5">Target: {formatMoney(Number(currentEvent?.target_amount || totalTarget))}</p>
             </div>
 
             <div className="space-y-1.5 pt-2">
-              <div className="flex justify-between items-center text-xs font-bold">
+              <div className="flex justify-between items-center text-xs font-bold text-white/80">
                 <span>Collected: {formatMoney(Number(currentEvent?.collected_amount || 0))}</span>
                 <span>
                   {Math.min(
@@ -290,15 +290,15 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
-            <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">Share Michango Link</h4>
+          <div className="bg-[#0C181A] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+            <h4 className="font-extrabold text-white text-xs uppercase tracking-wider">Share Michango Link</h4>
             
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(`Changia ${title} via LUMO Split: ${generatedLink || window.location.href}`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs"
+                className="py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>WhatsApp</span>
@@ -306,24 +306,24 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
 
               <button
                 onClick={copyLink}
-                className="py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs"
+                className="py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? <Check className="w-4 h-4 text-[#00E599]" /> : <Copy className="w-4 h-4 text-[#00E599]" />}
                 <span>{copied ? 'Copied!' : 'Copy Link'}</span>
               </button>
             </div>
           </div>
 
           {/* Real Contributors Tracker */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+          <div className="bg-[#0C181A] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+              <h4 className="font-extrabold text-white text-xs uppercase tracking-wider">
                 Contributors ({contributors.length})
               </h4>
               <button
                 onClick={() => currentEvent && fetchContributors(`MCHANG-${currentEvent.id.slice(0, 6)}`)}
                 disabled={loadingContributors}
-                className="text-xs font-bold text-amber-600 inline-flex items-center space-x-1"
+                className="text-xs font-bold text-[#00E599] inline-flex items-center space-x-1 hover:brightness-110"
               >
                 <RefreshCw className={`w-3 h-3 ${loadingContributors ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
@@ -331,20 +331,20 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
             </div>
 
             {loadingContributors ? (
-              <div className="text-center py-4 text-xs text-slate-400">Loading contributors...</div>
+              <div className="text-center py-4 text-xs text-white/40">Loading contributors...</div>
             ) : contributors.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">No pledges or contributions received yet. Share the link above!</p>
+              <p className="text-xs text-white/40 text-center py-4">No pledges or contributions received yet. Share the link above!</p>
             ) : (
               <div className="space-y-2">
                 {contributors.map((c) => (
-                  <div key={c.id} className="p-3 bg-amber-50/40 rounded-2xl border border-amber-100/60 flex items-center justify-between">
+                  <div key={c.id} className="p-3 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">{c.payer_name}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{c.payer_phone}</p>
+                      <p className="font-bold text-white text-xs">{c.payer_name}</p>
+                      <p className="text-[10px] text-white/50 font-mono">{c.payer_phone}</p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-amber-600 text-xs block">+{formatMoney(Number(c.amount))}</span>
-                      <span className="text-[9px] text-slate-400">{new Date(c.created_at).toLocaleDateString()}</span>
+                      <span className="font-black text-[#00E599] text-xs block">+{formatMoney(Number(c.amount))}</span>
+                      <span className="text-[9px] text-white/40">{new Date(c.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 ))}

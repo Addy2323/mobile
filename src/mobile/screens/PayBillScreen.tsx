@@ -80,17 +80,17 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
   };
 
   return (
-    <div className="p-4 space-y-5 no-tap-highlight">
+    <div className="p-4 space-y-5 no-tap-highlight min-h-screen bg-[#060D0E] text-white">
       <div className="flex items-center space-x-2">
-        <button onClick={onBack} className="p-1.5 -ml-1 text-slate-700 hover:text-slate-900 rounded-full hover:bg-slate-100">
+        <button onClick={onBack} className="p-1.5 -ml-1 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h2 className="text-base font-bold text-slate-900">{t('payABill')}</h2>
+        <h2 className="text-base font-bold text-white">{t('payABill')}</h2>
       </div>
 
       {/* Billers list selector */}
       <div className="space-y-3">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Select Service Provider</h3>
+        <h3 className="text-xs font-bold text-white/60 uppercase tracking-wider px-1">Select Service Provider</h3>
 
         <div className="grid grid-cols-2 gap-2.5">
           {billers.map((b) => (
@@ -103,13 +103,15 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
                 setBillError(null);
               }}
               className={`p-3.5 rounded-2xl border-2 text-left flex items-center space-x-3 transition-all ${
-                biller === b.name ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white hover:border-slate-200'
+                biller === b.name
+                  ? 'border-[#00E599] bg-[#00E599]/10 shadow-lg shadow-[#00E599]/10'
+                  : 'border-white/10 bg-[#0C181A] hover:border-white/20'
               }`}
             >
-              <div className={`p-2.5 rounded-xl ${b.bg}`}>{b.icon}</div>
+              <div className="p-2.5 rounded-xl bg-white/5">{b.icon}</div>
               <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-slate-900 text-xs truncate">{b.name}</h4>
-                <p className="text-[10px] text-slate-500 truncate">{b.category}</p>
+                <h4 className="font-bold text-white text-xs truncate">{b.name}</h4>
+                <p className="text-[10px] text-white/50 truncate">{b.category}</p>
               </div>
             </button>
           ))}
@@ -117,30 +119,30 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
       </div>
 
       {billReceipt ? (
-        <div className="bg-slate-900 text-white p-6 rounded-3xl space-y-4 border border-slate-800 shadow-xl text-center">
-          <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
+        <div className="bg-[#0C181A] text-white p-6 rounded-3xl space-y-4 border border-[#00E599]/30 shadow-xl text-center">
+          <div className="w-12 h-12 rounded-full bg-[#00E599]/20 text-[#00E599] border border-[#00E599]/40 flex items-center justify-center mx-auto">
             <Zap className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold">Bill Payment Successful!</h3>
-          <p className="text-xs text-slate-300">Provider: {billReceipt.provider || biller}</p>
-          <p className="text-xs text-slate-300">Meter / Control No: {billReceipt.account_meter_number || controlNumber}</p>
-          <p className="text-xl font-extrabold text-emerald-400">TZS {(billReceipt.amount || parseFloat(amount) || 40000).toLocaleString()}</p>
+          <h3 className="text-lg font-bold text-white">Bill Payment Successful!</h3>
+          <p className="text-xs text-white/70">Provider: {billReceipt.provider || biller}</p>
+          <p className="text-xs text-white/70">Meter / Control No: {billReceipt.account_meter_number || controlNumber}</p>
+          <p className="text-xl font-extrabold text-[#00E599]">TZS {(billReceipt.amount || parseFloat(amount) || 40000).toLocaleString()}</p>
 
           {billReceipt.token_code && (
-            <div className="p-3.5 bg-black/60 rounded-2xl border border-emerald-500/30 text-left space-y-1">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Electricity Token Code (LUKU)</span>
+            <div className="p-3.5 bg-[#081214] rounded-2xl border border-[#00E599]/30 text-left space-y-1">
+              <span className="text-[10px] font-bold text-[#00E599] uppercase tracking-wider block">Electricity Token Code (LUKU)</span>
               <p className="font-mono text-base font-bold text-white tracking-widest">{billReceipt.token_code}</p>
               {billReceipt.units_purchased && (
-                <p className="text-xs text-slate-400">Units: {billReceipt.units_purchased}</p>
+                <p className="text-xs text-white/60">Units: {billReceipt.units_purchased}</p>
               )}
             </div>
           )}
 
-          <p className="text-[11px] font-mono text-slate-400">Receipt Ref: {billReceipt.receipt_ref || 'BILL-OK'}</p>
+          <p className="text-[11px] font-mono text-white/50">Receipt Ref: {billReceipt.receipt_ref || 'BILL-OK'}</p>
 
           <button
             onClick={() => { setBillReceipt(null); setValidated(false); }}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs"
+            className="w-full py-3 bg-[#00E599] hover:brightness-105 text-[#060D0E] font-black rounded-xl text-xs transition-all"
           >
             Done
           </button>
@@ -148,9 +150,9 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
       ) : (
         /* Control Number Input Form */
         <form onSubmit={handleValidate} className="space-y-4">
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-4">
             <div>
-              <label className="text-xs font-bold text-slate-600 mb-1 block">Control Number / Meter / Account</label>
+              <label className="text-xs font-bold text-white/80 mb-1 block">Control Number / Meter / Account</label>
               <div className="relative">
                 <input
                   type="text"
@@ -162,11 +164,11 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
                     setBillError(null);
                   }}
                   placeholder="e.g. 991234567890"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 text-sm focus:outline-none focus:border-indigo-600"
+                  className="w-full px-4 py-3 bg-[#081214] border border-white/10 rounded-xl font-mono font-bold text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#00E599]"
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg text-xs hover:bg-indigo-700"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#00E599] text-[#060D0E] font-black rounded-lg text-xs hover:brightness-105 transition-all"
                 >
                   Lookup
                 </button>
@@ -174,18 +176,18 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
             </div>
 
             {billError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium">
                 {billError}
               </div>
             )}
 
             {validated && (
-              <div className="space-y-4 pt-3 border-t border-slate-100">
-                <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-1">
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase">Validated Bill Info</span>
-                  <h4 className="font-extrabold text-slate-900 text-sm">Customer Account Identified</h4>
-                  <p className="text-xs text-slate-600">Biller: {biller}</p>
-                  <p className="text-sm font-black text-indigo-600 pt-1">Amount: {formatMoney(parseFloat(amount) || 40000)}</p>
+              <div className="space-y-4 pt-3 border-t border-white/10">
+                <div className="p-3.5 bg-[#081214] rounded-2xl border border-[#00E599]/30 space-y-1">
+                  <span className="text-[10px] font-bold text-[#00E599] uppercase">Validated Bill Info</span>
+                  <h4 className="font-extrabold text-white text-sm">Customer Account Identified</h4>
+                  <p className="text-xs text-white/70">Biller: {biller}</p>
+                  <p className="text-sm font-black text-[#00E599] pt-1">Amount: {formatMoney(parseFloat(amount) || 40000)}</p>
                 </div>
 
                 <PaymentDestinationSelector
@@ -200,7 +202,7 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
                   <button
                     type="button"
                     onClick={handleCreateHouseContribution}
-                    className="py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5"
+                    className="py-3.5 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 text-xs flex items-center justify-center space-x-1.5 transition-all"
                   >
                     <Users className="w-4 h-4" />
                     <span>Split This Bill</span>
@@ -210,7 +212,7 @@ export const PayBillScreen: React.FC<PayBillScreenProps> = ({ onBack, onSplitBil
                     type="button"
                     onClick={handlePaySolo}
                     disabled={payingSolo}
-                    className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                    className="py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl shadow text-xs flex items-center justify-center space-x-1.5 disabled:opacity-50 transition-colors"
                   >
                     <span>{payingSolo ? 'Processing...' : 'Pay Solo'}</span>
                     <ArrowRight className="w-4 h-4" />

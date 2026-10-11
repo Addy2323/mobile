@@ -130,46 +130,46 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col justify-between p-4 pb-safe no-tap-highlight max-w-[560px] mx-auto shadow-2xl">
+    <div className="min-h-dvh bg-[#060D0E] text-white flex flex-col justify-between p-4 pb-safe no-tap-highlight max-w-[560px] mx-auto shadow-2xl">
       {/* Header */}
       <div className="flex items-center justify-between pt-2 pb-2">
         {onBackToSplit ? (
-          <button onClick={onBackToSplit} className="p-1.5 -ml-1 text-slate-600 hover:text-slate-900">
+          <button onClick={onBackToSplit} className="p-1.5 -ml-1 text-white/80 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
         ) : (
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xs">
+            <div className="w-8 h-8 bg-[#00E599] rounded-xl flex items-center justify-center text-[#060D0E] font-black text-xs">
               LS
             </div>
-            <span className="font-extrabold text-slate-900 text-sm">LUMO Split</span>
+            <span className="font-extrabold text-white text-sm">LUMO Split</span>
           </div>
         )}
-        <span className="text-[11px] font-mono font-bold text-slate-400">Ref: {token}</span>
+        <span className="text-[11px] font-mono font-bold text-white/40">Ref: {token}</span>
       </div>
 
       {/* Loading State */}
       {step === 'loading' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-3 py-12">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-          <p className="text-xs font-bold text-slate-500">Verifying payment link...</p>
+          <RefreshCw className="w-8 h-8 text-[#00E599] animate-spin" />
+          <p className="text-xs font-bold text-white/60">Verifying payment link...</p>
         </div>
       )}
 
       {/* Error / Expired / Invalid State */}
       {step === 'error' && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm text-center space-y-4 my-auto">
-          <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <div className="bg-[#0C181A] p-6 rounded-3xl border border-white/10 shadow-xl text-center space-y-4 my-auto text-white">
+          <div className="w-16 h-16 bg-rose-500/15 text-rose-400 rounded-full flex items-center justify-center mx-auto">
             <AlertCircle className="w-8 h-8" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900">Link Unavailable</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">{errorMessage}</p>
+            <h3 className="text-lg font-black text-white">Link Unavailable</h3>
+            <p className="text-xs text-white/60 mt-1 max-w-xs mx-auto leading-relaxed">{errorMessage}</p>
           </div>
 
           <button
             onClick={fetchPublicLink}
-            className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-2xl text-xs flex items-center justify-center space-x-1.5"
+            className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl text-xs flex items-center justify-center space-x-1.5 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Try Again</span>
@@ -180,19 +180,19 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
       {data && (step === 'method' || step === 'phone' || step === 'waiting' || step === 'success') && (
         <>
           {/* Link / Bill Overview Card */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-3">
+            <div className="flex items-center justify-between text-xs font-semibold text-white/60">
               <span>{data.organizerName ? `${data.organizerName} requested payment` : 'Instant Pay Link'}</span>
-              <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+              <span className="bg-[#00E599]/15 border border-[#00E599]/30 text-[#00E599] px-2.5 py-0.5 rounded-full font-bold text-[11px]">
                 {data.status}
               </span>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-slate-900 leading-snug">{data.title}</h2>
+              <h2 className="text-lg font-bold text-white leading-snug">{data.title}</h2>
               {data.destinationSnapshot?.displayName && (
-                <div className="flex items-center space-x-1.5 text-xs text-slate-500 mt-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <div className="flex items-center space-x-1.5 text-xs text-white/60 mt-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#00E599] shrink-0" />
                   <span className="font-semibold truncate">
                     Destination: {data.destinationSnapshot.displayName} ({data.destinationSnapshot.accountNumberMasked || 'Verified Account'})
                   </span>
@@ -200,12 +200,12 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
               )}
             </div>
 
-            <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100/80 flex items-center justify-between">
+            <div className="p-4 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider">Amount Due</span>
-                <h3 className="text-2xl font-black text-indigo-600">{formatMoney(data.amount)}</h3>
+                <span className="text-xs font-bold text-[#00E599] uppercase tracking-wider">Amount Due</span>
+                <h3 className="text-2xl font-black text-white">{formatMoney(data.amount)}</h3>
               </div>
-              <span className="text-xs font-semibold text-indigo-700 bg-white px-3 py-1 rounded-xl shadow-xs">
+              <span className="text-xs font-semibold text-[#00E599] bg-[#00E599]/10 border border-[#00E599]/20 px-3 py-1 rounded-xl">
                 Verified Link
               </span>
             </div>
@@ -215,7 +215,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
           {step === 'method' && (
             <div className="flex-1 flex flex-col justify-between py-4 space-y-4">
               <div className="space-y-3">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
+                <h3 className="text-xs font-bold text-white/60 uppercase tracking-wider px-1">
                   {t('choosePaymentMethod')}
                 </h3>
 
@@ -225,22 +225,22 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                     onClick={() => setProvider('mobile')}
                     className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
                       provider === 'mobile'
-                        ? 'border-indigo-600 bg-indigo-50/50'
-                        : 'border-slate-100 bg-white hover:border-slate-200'
+                        ? 'border-[#00E599] bg-[#00E599]/10 shadow-lg shadow-[#00E599]/10'
+                        : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="p-2.5 bg-rose-100 text-rose-600 rounded-xl">
+                      <div className="p-2.5 bg-white/5 text-[#00E599] rounded-xl">
                         <Smartphone className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">Mobile Money</h4>
-                        <p className="text-xs text-slate-500">M-Pesa, Tigo Pesa, Airtel Money, HaloPesa</p>
+                        <h4 className="font-bold text-white text-sm">Mobile Money</h4>
+                        <p className="text-xs text-white/50">M-Pesa, Tigo Pesa, Airtel Money, HaloPesa</p>
                       </div>
                     </div>
                     <div
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        provider === 'mobile' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                        provider === 'mobile' ? 'border-[#00E599] bg-[#00E599] text-[#060D0E]' : 'border-white/30'
                       }`}
                     />
                   </div>
@@ -250,22 +250,22 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                     onClick={() => setProvider('bank')}
                     className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
                       provider === 'bank'
-                        ? 'border-indigo-600 bg-indigo-50/50'
-                        : 'border-slate-100 bg-white hover:border-slate-200'
+                        ? 'border-[#00E599] bg-[#00E599]/10 shadow-lg shadow-[#00E599]/10'
+                        : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
+                      <div className="p-2.5 bg-white/5 text-[#00E599] rounded-xl">
                         <Building2 className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{t('bankAccount')}</h4>
-                        <p className="text-xs text-slate-500">CRDB, NMB, KCB, Equity Bank</p>
+                        <h4 className="font-bold text-white text-sm">{t('bankAccount')}</h4>
+                        <p className="text-xs text-white/50">CRDB, NMB, KCB, Equity Bank</p>
                       </div>
                     </div>
                     <div
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        provider === 'bank' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                        provider === 'bank' ? 'border-[#00E599] bg-[#00E599] text-[#060D0E]' : 'border-white/30'
                       }`}
                     />
                   </div>
@@ -275,22 +275,22 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                     onClick={() => setProvider('card')}
                     className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
                       provider === 'card'
-                        ? 'border-indigo-600 bg-indigo-50/50'
-                        : 'border-slate-100 bg-white hover:border-slate-200'
+                        ? 'border-[#00E599] bg-[#00E599]/10 shadow-lg shadow-[#00E599]/10'
+                        : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
+                      <div className="p-2.5 bg-white/5 text-[#00E599] rounded-xl">
                         <CreditCard className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{t('card')}</h4>
-                        <p className="text-xs text-slate-500">Visa / Mastercard</p>
+                        <h4 className="font-bold text-white text-sm">{t('card')}</h4>
+                        <p className="text-xs text-white/50">Visa / Mastercard</p>
                       </div>
                     </div>
                     <div
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        provider === 'card' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                        provider === 'card' ? 'border-[#00E599] bg-[#00E599] text-[#060D0E]' : 'border-white/30'
                       }`}
                     />
                   </div>
@@ -299,7 +299,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
               <button
                 onClick={() => setStep('phone')}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+                className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 transition-all"
               >
                 {t('payNow')} {formatMoney(data.amount)}
               </button>
@@ -311,27 +311,27 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
             <form onSubmit={handleStartPayment} className="flex-1 flex flex-col justify-between py-4 space-y-4">
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">Contributor Details</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <h3 className="text-lg font-extrabold text-white">Contributor Details</h3>
+                  <p className="text-xs text-white/60 mt-0.5">
                     Enter your name and mobile number to authorize the instant payment.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-600 mb-1 block">Your Full Name</label>
+                    <label className="text-xs font-bold text-white/80 mb-1 block">Your Full Name</label>
                     <input
                       type="text"
                       value={payerName}
                       onChange={(e) => setPayerName(e.target.value)}
                       placeholder="e.g. Kelvin John Mushi"
                       required
-                      className="w-full px-4 py-3 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-sm text-slate-900"
+                      className="w-full px-4 py-3 bg-[#081214] rounded-2xl border border-white/10 focus:border-[#00E599] focus:outline-none font-bold text-sm text-white placeholder-white/30"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-600 mb-1 block">Phone Number (M-Pesa / Tigo Pesa / Airtel)</label>
+                    <label className="text-xs font-bold text-white/80 mb-1 block">Phone Number (M-Pesa / Tigo Pesa / Airtel)</label>
                     <input
                       type="tel"
                       inputMode="tel"
@@ -339,20 +339,20 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="0754 123 456"
                       required
-                      className="w-full px-4 py-3 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-lg text-slate-900 font-mono"
+                      className="w-full px-4 py-3 bg-[#081214] rounded-2xl border border-white/10 focus:border-[#00E599] focus:outline-none font-bold text-lg text-white font-mono placeholder-white/30"
                       autoFocus
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-600 mb-1 block">Amount to Pay (TZS)</label>
+                    <label className="text-xs font-bold text-white/80 mb-1 block">Amount to Pay (TZS)</label>
                     <input
                       type="number"
                       inputMode="decimal"
                       value={customAmount || data.amount}
                       onChange={(e) => setCustomAmount(e.target.value)}
                       required
-                      className="w-full px-4 py-3 bg-slate-100 rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-black text-lg text-slate-900"
+                      className="w-full px-4 py-3 bg-[#081214] rounded-2xl border border-white/10 focus:border-[#00E599] focus:outline-none font-black text-lg text-white placeholder-white/30"
                     />
                   </div>
                 </div>
@@ -361,7 +361,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+                className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 transition-all disabled:opacity-50"
               >
                 {loading ? 'Processing...' : `Confirm & Pay ${formatMoney(Number(customAmount || data.amount))}`}
               </button>
@@ -373,13 +373,13 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
             <div className="flex-1 flex flex-col justify-between py-8 text-center space-y-6">
               <div className="my-auto space-y-6">
                 <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
-                  <span className="text-2xl font-black text-indigo-600">{countdown}s</span>
+                  <div className="absolute inset-0 rounded-full border-4 border-white/10 border-t-[#00E599] animate-spin" />
+                  <span className="text-2xl font-black text-[#00E599]">{countdown}s</span>
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-extrabold text-slate-900">{t('waitingApproval')}</h3>
-                  <p className="text-xs text-slate-500 mt-2 max-w-xs mx-auto leading-relaxed">
+                  <h3 className="text-xl font-extrabold text-white">{t('waitingApproval')}</h3>
+                  <p className="text-xs text-white/60 mt-2 max-w-xs mx-auto leading-relaxed">
                     {t('approvalNotice')}
                   </p>
                 </div>
@@ -387,7 +387,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
               <button
                 onClick={() => setStep('success')}
-                className="w-full py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl text-xs"
+                className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl text-xs transition-colors"
               >
                 Simulate Instant Success
               </button>
@@ -398,37 +398,37 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
           {step === 'success' && (
             <div className="flex-1 flex flex-col justify-between py-6 text-center space-y-6">
               <div className="my-auto space-y-6">
-                <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <div className="w-20 h-20 bg-[#00E599]/20 text-[#00E599] border border-[#00E599]/40 rounded-full flex items-center justify-center mx-auto shadow-inner">
                   <CheckCircle2 className="w-12 h-12" />
                 </div>
 
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900">{t('paymentSuccessful')}</h2>
-                  <p className="text-indigo-600 font-extrabold text-lg mt-1">
+                  <h2 className="text-2xl font-black text-white">{t('paymentSuccessful')}</h2>
+                  <p className="text-[#00E599] font-extrabold text-lg mt-1">
                     {formatMoney(data.amount)}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-white/60 mt-1">
                     You have successfully paid for {data.title}
                   </p>
                 </div>
 
                 {/* Receipt Summary Card */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-left space-y-3">
-                  <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
-                    <span className="text-slate-500">Transaction Ref</span>
-                    <span className="font-mono font-bold text-slate-900">{txRef}</span>
+                <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl text-left space-y-3">
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-white/10">
+                    <span className="text-white/60">Transaction Ref</span>
+                    <span className="font-mono font-bold text-white">{txRef}</span>
                   </div>
 
-                  <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
-                    <span className="text-slate-500">Destination</span>
-                    <span className="font-bold text-slate-900 truncate ml-2">
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-white/10">
+                    <span className="text-white/60">Destination</span>
+                    <span className="font-bold text-white truncate ml-2">
                       {data.destinationSnapshot?.displayName || 'LUMO Collection'}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-500">Status</span>
-                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold rounded-full text-[11px]">
+                    <span className="text-white/60">Status</span>
+                    <span className="px-2.5 py-0.5 bg-[#00E599]/20 text-[#00E599] font-extrabold rounded-full text-[11px]">
                       Successful
                     </span>
                   </div>
@@ -439,7 +439,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
               <button
                 onClick={() => onBackToSplit ? onBackToSplit() : fetchPublicLink()}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+                className="w-full py-4 bg-[#00E599] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 transition-all"
               >
                 Done
               </button>
