@@ -14,7 +14,6 @@ import { MichangoScreen } from '../screens/MichangoScreen';
 import { PayBillScreen } from '../screens/PayBillScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { NotificationsSheet } from '../screens/NotificationsSheet';
-import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { Toast, type ToastMessage } from './Toast';
 import { type Split } from '@/lib/supabase';
 import { type Language } from '@/lib/i18n';
@@ -26,10 +25,6 @@ export const MobileShell: React.FC = () => {
   >('main');
 
   const [language, setLanguage] = useState<Language>('en');
-  const [hasOnboarded, setHasOnboarded] = useState<boolean>(() => {
-    return localStorage.getItem('lumo_onboarded') === 'true';
-  });
-
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeToast, setActiveToast] = useState<ToastMessage | null>(null);
@@ -45,22 +40,6 @@ export const MobileShell: React.FC = () => {
   const showToast = (title: string, message?: string, type: 'success' | 'error' | 'info' = 'success') => {
     setActiveToast({ id: Date.now().toString(), type, title, message });
   };
-
-  const handleOnboardingComplete = () => {
-    localStorage.setItem('lumo_onboarded', 'true');
-    setHasOnboarded(true);
-    showToast('Welcome to LUMO Split! 🎉', 'Your mobile wallet and bill splitting hub is ready.');
-  };
-
-  if (!hasOnboarded) {
-    return (
-      <OnboardingScreen
-        onComplete={handleOnboardingComplete}
-        language={language}
-        onLanguageChange={setLanguage}
-      />
-    );
-  }
 
   // Handle /s/:token guest payment screen view
   if (activeView === 'friendPayment') {
@@ -140,8 +119,14 @@ export const MobileShell: React.FC = () => {
                   }}
                   onOpenNotifications={() => setIsNotificationsOpen(true)}
                   onSignOut={() => {
+                    localStorage.removeItem('lumo_user');
+                    localStorage.removeItem('lumo_user_phone');
+                    localStorage.removeItem('lumo_user_token');
+                    localStorage.removeItem('lumo_owner_id');
+                    localStorage.removeItem('lumo_authenticated');
                     localStorage.removeItem('lumo_onboarded');
-                    setHasOnboarded(false);
+                    window.dispatchEvent(new Event('lumo-auth-changed'));
+                    window.location.reload();
                   }}
                 />
               )}

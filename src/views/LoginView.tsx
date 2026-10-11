@@ -572,20 +572,6 @@ export default function LoginView({
                 )}
               </button>
             </form>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setOnboardingPhone('');
-                  switchMode('onboarding');
-                }}
-                className="text-xs font-bold text-slate-400 hover:text-[#00E599] transition flex items-center justify-center gap-1.5 mx-auto"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#00E599]" />
-                <span>New to LUMO? Take a quick tour</span>
-              </button>
-            </div>
           </div>
         )}
 

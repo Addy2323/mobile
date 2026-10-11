@@ -50,6 +50,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [downloadDone, setDownloadDone] = useState(false);
   const inStandalone = isStandaloneApp();
 
+  useEffect(() => {
+    if (initialPhone) setPhone(initialPhone);
+  }, [initialPhone]);
+
   const handleInstallApp = async () => {
     setDownloading(true);
     try {
@@ -366,7 +370,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           >
             {/* Header: LUMO Split Brand + Skip Button */}
             <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {onBackToPhoneCheck && (
+                  <button
+                    type="button"
+                    onClick={onBackToPhoneCheck}
+                    className="p-2 -ml-2 text-slate-400 hover:text-white rounded-full transition-colors cursor-pointer"
+                    title="Change Phone Number"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                )}
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#06241D] to-[#0D382E] border border-[#00E599]/40 flex items-center justify-center text-[#00E599] shadow-[0_0_12px_rgba(0,229,153,0.2)]">
                   <span className="text-xs font-black tracking-tight">[|]</span>
                 </div>
@@ -382,7 +396,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
               <button
                 onClick={() => setStep('language')}
-                className="text-sm font-bold text-[#00E599] hover:text-[#52ffc2] active:scale-95 transition-all tracking-wide px-2 py-1"
+                className="text-sm font-bold text-[#00E599] hover:text-[#52ffc2] active:scale-95 transition-all tracking-wide px-2 py-1 cursor-pointer"
               >
                 Skip
               </button>
@@ -508,8 +522,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <div className="flex-1 flex flex-col justify-between">
             <div className="pt-1">
               <button
-                onClick={() => setStep('language')}
-                className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors"
+                type="button"
+                onClick={() => {
+                  if (onBackToPhoneCheck) onBackToPhoneCheck();
+                  else setStep('language');
+                }}
+                className="p-2.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>

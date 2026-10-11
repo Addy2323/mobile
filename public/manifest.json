@@ -4,8 +4,8 @@
   "description": "Split bills, share the moment, and track payments instantly.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#4f46e5",
+  "background_color": "#060D0E",
+  "theme_color": "#060D0E",
   "icons": [
     {
       "src": "/icon-192.png",

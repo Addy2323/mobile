@@ -35,12 +35,27 @@ export default function App() {
   }
 
   const publicToken = getPublicToken();
-  const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('lumo_authenticated') === 'true');
+  const [authenticated, setAuthenticated] = useState(() => {
+    const isAuth = localStorage.getItem('lumo_authenticated') === 'true';
+    const phone = localStorage.getItem('lumo_user_phone');
+    return isAuth && Boolean(phone);
+  });
   const [isLocked, setIsLocked] = useState(false);
   const [lockReason, setLockReason] = useState('');
   const [view, setView] = useState<View>('home');
   const [activeSplit, setActiveSplit] = useState<Split | null>(null);
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
+
+  // Sync auth state when storage or events change
+  useEffect(() => {
+    const syncAuth = () => {
+      const isAuth = localStorage.getItem('lumo_authenticated') === 'true';
+      const phone = localStorage.getItem('lumo_user_phone');
+      setAuthenticated(isAuth && Boolean(phone));
+    };
+    window.addEventListener('lumo-auth-changed', syncAuth);
+    return () => window.removeEventListener('lumo-auth-changed', syncAuth);
+  }, []);
 
   // 60-second inactivity session lock
   useEffect(() => {
