@@ -16,14 +16,11 @@ CREATE TABLE IF NOT EXISTS application_integrations (
 -- Seed registered default website integrations
 INSERT INTO application_integrations (application_key, display_name, website_domain, webhook_url, redirect_url, is_active)
 VALUES 
-  ('lumo-split', 'LUMO Split', 'lumo.co.tz', 'https://lumo.co.tz/api/webhooks/snippe', 'https://lumo.co.tz', true),
+  ('lumo-split', 'LUMO Split', 'lumosplit.lumo.co.tz', 'https://lumosplit.lumo.co.tz/api/webhooks/snippe', 'https://lumosplit.lumo.co.tz', true),
   ('mhema-logistics', 'MHEMA Logistics', 'mhemalogistics.co.tz', 'https://mhemalogistics.co.tz/api/webhooks/snippe', 'https://mhemalogistics.co.tz', true),
   ('rewamart', 'RewaMart', 'rewamart.co.tz', 'https://rewamart.co.tz/api/webhooks/snippe', 'https://rewamart.co.tz', true),
   ('yifcapital', 'YIF Capital', 'yifcapital.co.tz', 'https://yifcapital.co.tz/api/webhooks/snippe', 'https://yifcapital.co.tz', true)
-ON CONFLICT (application_key) DO UPDATE 
-  SET display_name = EXCLUDED.display_name,
-      website_domain = EXCLUDED.website_domain,
-      webhook_url = EXCLUDED.webhook_url;
+ON CONFLICT (application_key) DO NOTHING;
 
 -- Enhance payment_attempts with integration and reconciliation metadata
 ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS application_id VARCHAR(64) DEFAULT 'lumo-split';
