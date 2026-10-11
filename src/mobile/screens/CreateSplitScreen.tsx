@@ -17,6 +17,7 @@ import {
   PartyPopper,
   ShoppingBag,
   MoreHorizontal,
+  Smartphone,
 } from 'lucide-react';
 import { supabase, type Split } from '@/lib/supabase';
 import { formatMoney } from '@/lib/utils';
@@ -167,6 +168,22 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
   const shareUrl = createdSplit
     ? `${window.location.origin}/s/${createdSplit.ref_code}`
     : `${window.location.origin}/s/DEMO`;
+
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
+
+  const handleResendSms = async () => {
+    if (!createdSplit) return;
+    setSmsSending(true);
+    try {
+      const res = await fetch(`/api/splits/${createdSplit.id}/notify-participants`, { method: 'POST' });
+      if (res.ok) setSmsSent(true);
+    } catch (e) {
+      console.warn('Failed resending SMS:', e);
+    } finally {
+      setSmsSending(false);
+    }
+  };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -479,6 +496,11 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                 {shareUrl}
               </div>
 
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-xs font-bold">
+                <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>SMS invites automatically dispatched via Meseji</span>
+              </div>
+
               <div className="space-y-2">
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(
@@ -491,6 +513,15 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                   <MessageCircle className="w-5 h-5" />
                   <span>{t('shareViaWhatsApp')}</span>
                 </a>
+
+                <button
+                  onClick={handleResendSms}
+                  disabled={smsSending}
+                  className="w-full py-3 bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs hover:bg-slate-800 transition"
+                >
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <span>{smsSending ? 'Sending SMS...' : smsSent ? 'SMS Resent ✓' : 'Resend SMS via Meseji'}</span>
+                </button>
 
                 <button
                   onClick={copyToClipboard}

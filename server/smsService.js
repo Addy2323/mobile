@@ -108,6 +108,18 @@ export class SmsService {
     const message = `Your LUMO ${actionText} is ${code}. Valid for 10 minutes. Do not share this code with anyone.`;
     return await this.sendSms({ phone, message });
   }
+
+  /**
+   * Helper to send split bill payment invitations to participants
+   */
+  async sendSplitInvite({ phone, participantName, organizerName, title, amount, paymentLink }) {
+    const greeting = participantName && participantName.trim() ? `Habari ${participantName.trim()}!` : 'Habari!';
+    const organizer = organizerName && organizerName.trim() ? organizerName.trim() : 'Mwenyeji';
+    const amountVal = Number(amount);
+    const shareText = amountVal > 0 ? `Sehemu yako ni TZS ${amountVal.toLocaleString()}.` : '';
+    const message = `${greeting} ${organizer} amekualika kwenye bili ya "${title}". ${shareText} Lipa kwa urahisi hapa: ${paymentLink} - LUMO Split`;
+    return await this.sendSms({ phone, message });
+  }
 }
 
 export const smsService = new SmsService();

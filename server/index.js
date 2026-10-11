@@ -11,6 +11,7 @@ import { ApplicationIntegrationService } from './applicationIntegrationService.j
 import { SnippeReconciliationJob } from './reconciliationJob.js';
 import { createAdminRouter } from './adminRoutes.js';
 import { createAuthRouter } from './authRoutes.js';
+import { smsService } from './smsService.js';
 import { LedgerService, calculateVipTier } from './ledgerService.js';
 
 dotenv.config();
@@ -1685,12 +1686,85 @@ app.post('/api/splits', async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.status(201).json({ ...createdSplit, participants: createdParticipants, items: createdItems });
+
+    // Automatically dispatch SMS to participants with phone numbers via Meseji
+    const appOrigin = process.env.APP_URL || (req.get('origin') || 'https://nosplit.lumo.co.tz');
+    const paymentLink = `${appOrigin}/s/${generatedRef}`;
+
+    (async () => {
+      for (const p of createdParticipants) {
+        if (p.phone && String(p.phone).trim().length >= 9) {
+          try {
+            await smsService.sendSplitInvite({
+              phone: p.phone,
+              participantName: p.name,
+              organizerName: createdSplit.organizer_name,
+              title: createdSplit.title,
+              amount: p.allocation_amount,
+              paymentLink
+            });
+            console.log(`[Split SMS] Invite SMS dispatched to ${p.name} (${p.phone}) for split ${generatedRef}`);
+          } catch (smsErr) {
+            console.warn(`[Split SMS] Failed to dispatch SMS to ${p.phone}:`, smsErr.message);
+          }
+        }
+      }
+    })();
+
+    res.status(201).json({ ...createdSplit, participants: createdParticipants, items: createdItems, share_link: paymentLink });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// Explicit endpoint to notify participants via Meseji SMS
+app.post('/api/splits/:id/notify-participants', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { participant_ids = [] } = req.body;
+
+    const sRes = await pool.query('SELECT * FROM splits WHERE id = $1', [id]);
+    if (sRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Split not found' });
+    }
+    const split = sRes.rows[0];
+
+    let pQuery = 'SELECT * FROM split_participants WHERE split_id = $1';
+    const params = [id];
+    if (participant_ids && participant_ids.length > 0) {
+      pQuery += ' AND id = ANY($2)';
+      params.push(participant_ids);
+    }
+    const pRes = await pool.query(pQuery, params);
+
+    const appOrigin = process.env.APP_URL || (req.get('origin') || 'https://nosplit.lumo.co.tz');
+    const paymentLink = `${appOrigin}/s/${split.ref_code}`;
+    const results = [];
+
+    for (const p of pRes.rows) {
+      if (p.phone && String(p.phone).trim().length >= 9) {
+        try {
+          const sent = await smsService.sendSplitInvite({
+            phone: p.phone,
+            participantName: p.name,
+            organizerName: split.organizer_name,
+            title: split.title,
+            amount: p.allocation_amount,
+            paymentLink
+          });
+          results.push({ id: p.id, phone: p.phone, name: p.name, success: true, batch_id: sent.batch_id });
+        } catch (err) {
+          results.push({ id: p.id, phone: p.phone, name: p.name, success: false, error: err.message });
+        }
+      }
+    }
+
+    res.json({ success: true, sent_count: results.filter(r => r.success).length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

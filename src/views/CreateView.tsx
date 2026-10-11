@@ -1367,4 +1367,77 @@ function PreviewStep({ title, totalNum, selectedDestinationName, selectedMerchan
   );
 }
 
-function ShareView({ split, merchant, shareLink, copied, onCopy, onComplete }: { split: Split; merchant: Merchant | null; shareLink: string; copied: boolean; onCopy: () => void; onComplete: () => void }) { return <div className="mx-auto max-w-2xl px-4 py-12 animate-slide-up"><div className="mb-8 text-center"><div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-success-500 text-white shadow-lg shadow-success-500/25"><CheckCircle2 className="h-10 w-10" /></div><h1 className="text-2xl font-extrabold text-slate-950">Split created</h1><p className="mt-2 text-slate-500">Share the link so everyone can pay their share.</p></div><div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"><div className="flex items-center gap-3 border-b border-slate-100 pb-5"><Receipt className="h-6 w-6 text-slate-500" /><div className="flex-1"><p className="font-bold text-slate-900">{split.title}</p><p className="text-xs text-slate-400">{merchant?.display_name || 'Verified destination'} · {formatMoney(split.total_amount)}</p></div></div><div className="mt-5 flex flex-col items-center"><div className="qr-placeholder"><QrCode className="h-20 w-20 text-slate-950" /></div><p className="mt-4 break-all rounded-lg bg-slate-50 px-3 py-2 text-center font-mono text-xs text-slate-600">{shareLink}</p><button onClick={onCopy} className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700">{copied ? <Check className="h-4 w-4 text-success-600" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy link'}</button></div><div className="mt-5 grid grid-cols-2 gap-2"><button className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-xs font-bold text-white"><MessageCircle className="h-4 w-4" /> WhatsApp</button><button className="flex items-center justify-center gap-2 rounded-lg bg-slate-950 py-3 text-xs font-bold text-white"><Smartphone className="h-4 w-4" /> SMS</button></div></div><div className="mt-5"><TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} /></div><button onClick={onComplete} className="mt-5 w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white">View split details</button></div>; }
+function ShareView({ split, merchant, shareLink, copied, onCopy, onComplete }: { split: Split; merchant: Merchant | null; shareLink: string; copied: boolean; onCopy: () => void; onComplete: () => void }) {
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
+
+  const handleSendSms = async () => {
+    setSmsSending(true);
+    try {
+      const res = await fetch(`/api/splits/${split.id}/notify-participants`, { method: 'POST' });
+      if (res.ok) {
+        setSmsSent(true);
+      }
+    } catch (e) {
+      console.warn('SMS dispatch error:', e);
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-12 animate-slide-up">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-success-500 text-white shadow-lg shadow-success-500/25">
+          <CheckCircle2 className="h-10 w-10" />
+        </div>
+        <h1 className="text-2xl font-extrabold text-slate-950">Split created</h1>
+        <p className="mt-2 text-slate-500">Share the link so everyone can pay their share.</p>
+        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-800">
+          <Smartphone className="h-3.5 w-3.5 text-emerald-600" />
+          SMS invites dispatched to participants via Meseji
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-5">
+          <Receipt className="h-6 w-6 text-slate-500" />
+          <div className="flex-1">
+            <p className="font-bold text-slate-900">{split.title}</p>
+            <p className="text-xs text-slate-400">{merchant?.display_name || 'Verified destination'} · {formatMoney(split.total_amount)}</p>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-col items-center">
+          <div className="qr-placeholder">
+            <QrCode className="h-20 w-20 text-slate-950" />
+          </div>
+          <p className="mt-4 break-all rounded-lg bg-slate-50 px-3 py-2 text-center font-mono text-xs text-slate-600">{shareLink}</p>
+          <button onClick={onCopy} className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700">
+            {copied ? <Check className="h-4 w-4 text-success-600" /> : <Copy className="h-4 w-4" />}
+            {copied ? 'Copied' : 'Copy link'}
+          </button>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`Habari! Umeongezwa kwenye bili ya ${split.title} kwenye LUMO Split. Lipa sehemu yako hapa: https://${shareLink}`)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-xs font-bold text-white hover:bg-[#20ba5c] transition"
+          >
+            <MessageCircle className="h-4 w-4" /> WhatsApp
+          </a>
+          <button
+            onClick={handleSendSms}
+            disabled={smsSending}
+            className="flex items-center justify-center gap-2 rounded-lg bg-slate-950 py-3 text-xs font-bold text-white hover:bg-slate-800 transition"
+          >
+            <Smartphone className="h-4 w-4" /> {smsSending ? 'Sending...' : smsSent ? 'SMS Resent ✓' : 'Resend SMS'}
+          </button>
+        </div>
+      </div>
+      <div className="mt-5">
+        <TrustStrip merchantName={merchant?.display_name} destinationId={merchant?.destination_id} />
+      </div>
+      <button onClick={onComplete} className="mt-5 w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white">View split details</button>
+    </div>
+  );
+}

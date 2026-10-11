@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   LockKeyhole,
   ShieldCheck,
@@ -32,6 +32,114 @@ type AuthMode =
   | 'register_details'
   | 'register_otp'
   | 'register_passcode';
+
+interface SixBoxOtpInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  onComplete: (code: string) => void;
+  disabled?: boolean;
+}
+
+function SixBoxOtpInput({ value, onChange, onComplete, disabled = false }: SixBoxOtpInputProps) {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    // Focus first empty box or box 0 on mount
+    const firstEmptyIndex = [0, 1, 2, 3, 4, 5].find((i) => !value[i]) ?? 0;
+    inputRefs.current[firstEmptyIndex]?.focus();
+  }, []);
+
+  const handleDigitChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const digits = raw.replace(/\D/g, '');
+
+    if (!digits) {
+      // User erased
+      const arr = value.split('');
+      arr[index] = '';
+      const updated = arr.join('').trimEnd();
+      onChange(updated);
+      return;
+    }
+
+    if (digits.length > 1) {
+      // Pasted multiple digits
+      const pasted = digits.slice(0, 6);
+      onChange(pasted);
+      if (pasted.length === 6) {
+        inputRefs.current[5]?.focus();
+        onComplete(pasted);
+      } else {
+        inputRefs.current[pasted.length]?.focus();
+      }
+      return;
+    }
+
+    // Single digit entered
+    const digit = digits[digits.length - 1];
+    const arr = value.padEnd(6, ' ').split('');
+    arr[index] = digit;
+    const updated = arr.join('').trimEnd();
+    onChange(updated);
+
+    if (index < 5 && digit) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    const cleanCode = arr.join('').replace(/\s/g, '');
+    if (cleanCode.length === 6) {
+      onComplete(cleanCode);
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !value[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted) {
+      onChange(pasted);
+      if (pasted.length === 6) {
+        inputRefs.current[5]?.focus();
+        onComplete(pasted);
+      } else {
+        inputRefs.current[pasted.length]?.focus();
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-2 sm:gap-2.5 my-3">
+      {[0, 1, 2, 3, 4, 5].map((idx) => {
+        const char = value[idx] || '';
+        return (
+          <input
+            key={idx}
+            ref={(el) => (inputRefs.current[idx] = el)}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={char}
+            onChange={(e) => handleDigitChange(idx, e)}
+            onKeyDown={(e) => handleKeyDown(idx, e)}
+            onPaste={handlePaste}
+            disabled={disabled}
+            className={`h-12 w-10 sm:h-13 sm:w-12 text-center text-2xl font-black rounded-xl border transition-all outline-none ${
+              char
+                ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-md shadow-emerald-950/40'
+                : 'border-white/15 bg-white/5 text-white focus:border-emerald-400 focus:bg-white/10'
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export default function LoginView({
   onSuccess,
@@ -192,8 +300,9 @@ export default function LoginView({
   // -------------------------------------------------------------
   // 3. FORGOT PASSCODE - VERIFY OTP
   // -------------------------------------------------------------
-  async function handleForgotVerifyOtp() {
-    if (!forgotOtp || forgotOtp.trim().length !== 6) {
+  async function handleForgotVerifyOtp(codeToVerify?: string) {
+    const code = (codeToVerify || forgotOtp || '').trim();
+    if (code.length !== 6) {
       setError('Please enter the 6-digit verification code sent via SMS');
       return;
     }
@@ -207,7 +316,7 @@ export default function LoginView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: forgotPhone,
-          code: forgotOtp.trim(),
+          code,
           purpose: 'FORGOT_PASSCODE'
         })
       });
@@ -217,10 +326,11 @@ export default function LoginView({
         throw new Error(data.error || 'Invalid code');
       }
 
-      setSuccessMsg('Phone verified. Set your new passcode.');
+      setSuccessMsg('Phone verified! Set your new passcode.');
       switchMode('forgot_new_passcode');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Invalid code. Please try again.');
+      setForgotOtp('');
     } finally {
       setBusy(false);
     }
@@ -307,8 +417,9 @@ export default function LoginView({
   // -------------------------------------------------------------
   // 6. REGISTRATION - VERIFY OTP
   // -------------------------------------------------------------
-  async function handleRegisterVerifyOtp() {
-    if (!regOtp || regOtp.trim().length !== 6) {
+  async function handleRegisterVerifyOtp(codeToVerify?: string) {
+    const code = (codeToVerify || regOtp || '').trim();
+    if (code.length !== 6) {
       setError('Please enter the 6-digit code received via SMS');
       return;
     }
@@ -322,7 +433,7 @@ export default function LoginView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: regPhone,
-          code: regOtp.trim(),
+          code,
           purpose: 'REGISTER'
         })
       });
@@ -335,7 +446,8 @@ export default function LoginView({
       setSuccessMsg('Phone verified! Now choose your 4-digit passcode.');
       switchMode('register_passcode');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Invalid code. Please try again.');
+      setRegOtp('');
     } finally {
       setBusy(false);
     }
@@ -635,29 +747,20 @@ export default function LoginView({
             </p>
 
             <div className="mt-5 space-y-4">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300">6-Digit SMS Code</label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={forgotOtp}
-                  onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
-                  className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 py-3 text-center text-2xl font-black tracking-[0.3em] text-emerald-400 placeholder-slate-600 focus:border-emerald-400 focus:outline-none"
-                  autoFocus
-                />
-              </div>
+              <SixBoxOtpInput
+                value={forgotOtp}
+                onChange={setForgotOtp}
+                onComplete={(code) => handleForgotVerifyOtp(code)}
+                disabled={busy}
+              />
 
-              <button
-                type="button"
-                onClick={handleForgotVerifyOtp}
-                disabled={busy || forgotOtp.length !== 6}
-                className="flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify Code'}
-              </button>
+              {busy && (
+                <div className="flex items-center justify-center gap-2 py-2 text-xs font-semibold text-emerald-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Verifying code...
+                </div>
+              )}
 
-              <div className="text-center">
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={handleForgotSendOtp}
@@ -821,29 +924,20 @@ export default function LoginView({
             </p>
 
             <div className="mt-5 space-y-4">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300">6-Digit Code</label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={regOtp}
-                  onChange={(e) => setRegOtp(e.target.value.replace(/\D/g, ''))}
-                  className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 py-3 text-center text-2xl font-black tracking-[0.3em] text-emerald-400 placeholder-slate-600 focus:border-emerald-400 focus:outline-none"
-                  autoFocus
-                />
-              </div>
+              <SixBoxOtpInput
+                value={regOtp}
+                onChange={setRegOtp}
+                onComplete={(code) => handleRegisterVerifyOtp(code)}
+                disabled={busy}
+              />
 
-              <button
-                type="button"
-                onClick={handleRegisterVerifyOtp}
-                disabled={busy || regOtp.length !== 6}
-                className="flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-3 text-sm font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Code'}
-              </button>
+              {busy && (
+                <div className="flex items-center justify-center gap-2 py-2 text-xs font-semibold text-emerald-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Verifying code...
+                </div>
+              )}
 
-              <div className="text-center">
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={handleRegisterSendOtp}
