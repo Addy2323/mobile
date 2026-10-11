@@ -1,6 +1,7 @@
-import React from 'react';
-import { Bell, Globe, ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bell, Globe, ChevronDown, Download } from 'lucide-react';
 import { type Language } from '@/lib/i18n';
+import { isStandaloneApp, triggerAppInstallation } from '@/lib/appDetection';
 
 interface TopAppBarProps {
   language: Language;
@@ -13,6 +14,18 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onLanguageToggle,
   onOpenNotifications,
 }) => {
+  const [inStandalone] = useState(() => isStandaloneApp());
+  const [downloading, setDownloading] = useState(false);
+
+  const handleInstallClick = async () => {
+    setDownloading(true);
+    try {
+      await triggerAppInstallation();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <header className="bg-[#060D0E] text-white px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sticky top-0 z-40 flex items-center justify-between shadow-lg border-b border-[#00E599]/20 no-tap-highlight">
       {/* Brand logo & Tanzania subtitle with Onboarding visual identity */}
@@ -33,6 +46,19 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 
       {/* Header Actions */}
       <div className="flex items-center space-x-2">
+        {/* Install App button (ONLY for browser users, NEVER in standalone app) */}
+        {!inStandalone && (
+          <button
+            onClick={handleInstallClick}
+            disabled={downloading}
+            className="h-9 px-2.5 flex items-center space-x-1.5 bg-[#0C1518] hover:bg-[#06241D] active:scale-95 text-[#00E599] rounded-xl border border-[#00E599]/40 text-xs font-bold transition-all shadow-[0_0_10px_rgba(0,229,153,0.15)] cursor-pointer"
+            title="Install Mobile App"
+          >
+            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span className="hidden sm:inline text-[11px]">Install</span>
+          </button>
+        )}
+
         {/* Language Switcher Pill [ 🌐 EN ˅ ] */}
         <button
           onClick={onLanguageToggle}

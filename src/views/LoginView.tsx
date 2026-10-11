@@ -11,10 +11,13 @@ import {
   Loader2,
   ChevronRight,
   Sparkles,
-  Smartphone
+  Smartphone,
+  Download,
+  Check
 } from 'lucide-react';
 import { SixBoxOtpInput } from '@/components/SixBoxOtpInput';
 import { OnboardingScreen } from '@/mobile/screens/OnboardingScreen';
+import { isStandaloneApp, triggerAppInstallation } from '@/lib/appDetection';
 
 export type LoginViewProps = {
   onSuccess: () => void;
@@ -89,6 +92,25 @@ export default function LoginView({
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmNewPasscode, setConfirmNewPasscode] = useState('');
   const [showResetPasscode, setShowResetPasscode] = useState(false);
+
+  // App Installation & Browser Detection State
+  const inStandalone = isStandaloneApp();
+  const [showLoginInstallPrompt, setShowLoginInstallPrompt] = useState(false);
+  const [installDownloading, setInstallDownloading] = useState(false);
+  const [installDownloadDone, setInstallDownloadDone] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const handleInstallClick = async () => {
+    setInstallDownloading(true);
+    try {
+      await triggerAppInstallation();
+      setInstallDownloadDone(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setInstallDownloading(false);
+    }
+  };
 
   // Lock body & html background to #060D0E
   useEffect(() => {
@@ -211,7 +233,13 @@ export default function LoginView({
       localStorage.setItem('lumo_user', JSON.stringify(data.user));
 
       window.dispatchEvent(new Event('lumo-auth-changed'));
-      onSuccess();
+      
+      // If user is running in a browser, prompt to install/download the app
+      if (!isStandaloneApp()) {
+        setShowLoginInstallPrompt(true);
+      } else {
+        onSuccess();
+      }
     } catch (err: any) {
       setError(err.message || 'Passcode sio sahihi. Jaribu tena.');
       setDigits('');
@@ -354,6 +382,32 @@ export default function LoginView({
       className="fixed inset-0 z-50 overflow-y-auto bg-[#060D0E] text-slate-100 flex flex-col justify-between items-center select-none font-sans"
       style={{ backgroundColor: '#060D0E' }}
     >
+      {/* Top Browser Install Banner - ONLY for web browser users, NEVER inside installed app */}
+      {!inStandalone && !bannerDismissed && (
+        <div className="w-full z-20 bg-[#091C18] border-b border-[#00E599]/25 px-4 py-2.5 flex items-center justify-between text-xs text-slate-200">
+          <div className="flex items-center space-x-2 truncate">
+            <Smartphone className="w-4 h-4 text-[#00E599] shrink-0" />
+            <span className="truncate text-xs font-semibold">Sakinisha app ya LUMO kwenye simu yako kwa uzoefu bora zaidi</span>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              onClick={handleInstallClick}
+              disabled={installDownloading}
+              className="px-2.5 py-1 rounded-lg bg-[#00E599] text-[#05110E] font-extrabold text-[11px] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+            >
+              {installDownloadDone ? '✓ Downloaded' : 'Install App'}
+            </button>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="text-slate-400 hover:text-white p-1 text-xs"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Corner luxury emerald wave ribbons - Matching OnboardingScreen */}
       <svg
         className="fixed inset-0 w-full h-full pointer-events-none overflow-hidden z-0"
@@ -803,6 +857,58 @@ export default function LoginView({
           </p>
         </div>
       </div>
+
+      {/* Post-login install prompt modal (ONLY for browser users, NEVER in app) */}
+      {showLoginInstallPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="bg-[#091719] border border-[#00E599]/40 rounded-3xl max-w-sm w-full p-6 text-center space-y-5 shadow-[0_0_50px_rgba(0,229,153,0.25)]">
+            <div className="w-16 h-16 rounded-full bg-[#0B2520] border-2 border-[#00E599]/60 flex items-center justify-center mx-auto text-[#00E599] shadow-lg">
+              <Smartphone className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-extrabold text-white">
+                Karibu Tena, {loginUserName || 'Mwanachama'}!
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Unaingia kupitia browser ya wavuti. Sakinisha LUMO Split kwenye simu yako kwa uzoefu wa haraka na salama zaidi.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                onClick={handleInstallClick}
+                disabled={installDownloading}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-black text-sm flex items-center justify-center space-x-2 shadow-[0_0_20px_rgba(0,229,153,0.3)] hover:brightness-110 active:scale-98 transition-all cursor-pointer"
+              >
+                {installDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#05110E]" />
+                    <span>Inapakua Installer...</span>
+                  </>
+                ) : installDownloadDone ? (
+                  <>
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Installer Imepakuliwa!</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 stroke-[2.5]" />
+                    <span>Install App (Pakua Installer)</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={onSuccess}
+                className="w-full py-3 px-4 rounded-2xl bg-[#0A201B] border border-[#00E599]/30 text-[#00E599] text-xs font-bold hover:bg-[#0E2C25] active:scale-98 transition-all cursor-pointer"
+              >
+                Endelea kwenye Dashboard (Browser) →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

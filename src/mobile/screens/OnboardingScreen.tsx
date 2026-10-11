@@ -9,10 +9,13 @@ import {
   Lock,
   Check,
   Loader2,
-  RotateCcw
+  RotateCcw,
+  Download,
+  Smartphone
 } from 'lucide-react';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { SixBoxOtpInput } from '@/components/SixBoxOtpInput';
+import { isStandaloneApp, triggerAppInstallation, isIosDevice } from '@/lib/appDetection';
 
 export interface OnboardingScreenProps {
   onComplete: () => void;
@@ -23,7 +26,7 @@ export interface OnboardingScreenProps {
   onBackToPhoneCheck?: () => void;
 }
 
-export type OnboardingStep = 'carousel' | 'language' | 'phone' | 'otp' | 'name' | 'pin' | 'biometric';
+export type OnboardingStep = 'carousel' | 'language' | 'phone' | 'otp' | 'name' | 'pin' | 'biometric' | 'account_created';
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onComplete,
@@ -43,6 +46,21 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadDone, setDownloadDone] = useState(false);
+  const inStandalone = isStandaloneApp();
+
+  const handleInstallApp = async () => {
+    setDownloading(true);
+    try {
+      await triggerAppInstallation();
+      setDownloadDone(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // Lock body & html background to #060D0E during onboarding to eliminate any white gaps or bars
   useEffect(() => {
@@ -196,7 +214,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       if (data.user) localStorage.setItem('lumo_user', JSON.stringify(data.user));
 
       window.dispatchEvent(new Event('lumo-auth-changed'));
-      setStep('biometric');
+      setStep('account_created');
     } catch (err: any) {
       setError(err.message || 'Could not complete registration. Please try again.');
       setConfirmPin(['', '', '', '']);
@@ -738,17 +756,108 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
             <div className="space-y-3 pb-2">
               <button
-                onClick={finishOnboarding}
+                onClick={() => setStep('account_created')}
                 className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-extrabold text-base shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>Enable & Finish Setup</span>
                 <ChevronRight className="w-5 h-5 stroke-[2.8]" />
               </button>
               <button
-                onClick={finishOnboarding}
+                onClick={() => setStep('account_created')}
                 className="w-full py-3 text-slate-400 hover:text-white text-sm font-semibold transition-colors"
               >
                 Maybe Later
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 8: Account Created Success & App Install/Download */}
+        {step === 'account_created' && (
+          <div className="flex-1 flex flex-col justify-between py-2">
+            <div className="pt-2" />
+
+            <div className="my-auto text-center space-y-6 max-w-sm mx-auto w-full px-2">
+              <div className="w-20 h-20 bg-[#0B2520] border-2 border-[#00E599]/60 rounded-full flex items-center justify-center mx-auto text-[#00E599] shadow-[0_0_35px_rgba(0,229,153,0.4)] animate-bounce">
+                <Check className="w-10 h-10 stroke-[3]" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Account Created Successfully!
+                </h2>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Karibu, <span className="text-[#00E599] font-bold">{name || 'LUMO Member'}</span>! Your digital split card & wallet ledger are ready.
+                </p>
+              </div>
+
+              {/* BROWSER DETECTED: Show Download/Install App Option */}
+              {!inStandalone ? (
+                <div className="p-5 rounded-3xl bg-[#091719] border border-[#00E599]/30 shadow-xl space-y-4 text-left">
+                  <div className="flex items-center space-x-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-[#0B2520] border border-[#00E599]/40 flex items-center justify-center text-[#00E599] shrink-0">
+                      <Smartphone className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">
+                        Install LUMO Split App
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Download mobile installer for fast, 1-tap split access.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleInstallApp}
+                    disabled={downloading}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] font-black text-sm flex items-center justify-center space-x-2 shadow-[0_0_20px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    {downloading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-[#05110E]" />
+                        <span>Inapakua Installer...</span>
+                      </>
+                    ) : downloadDone ? (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>Installer Downloaded!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 stroke-[2.5]" />
+                        <span>Install App (Download Installer)</span>
+                      </>
+                    )}
+                  </button>
+
+                  {downloadDone && (
+                    <p className="text-[11px] text-[#00E599] text-center font-medium">
+                      ✓ Angalia folda ya Downloads kwenye simu yako kusakinisha
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* INSTALLED APP DETECTED: No download prompt shown */
+                <div className="p-4 rounded-2xl bg-[#0A2620] border border-[#00E599]/30 text-center">
+                  <p className="text-xs text-[#00E599] font-bold">
+                    ✓ Official LUMO Mobile Application Active
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 pb-2 max-w-sm mx-auto w-full">
+              <button
+                onClick={finishOnboarding}
+                className={`w-full py-4 px-6 rounded-full font-extrabold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  inStandalone
+                    ? 'bg-gradient-to-r from-[#00E599] to-[#00C782] text-[#05110E] shadow-[0_0_25px_rgba(0,229,153,0.35)] hover:brightness-110 active:scale-[0.98]'
+                    : 'bg-[#0E2822] border border-[#00E599]/40 text-[#00E599] hover:bg-[#133830] active:scale-[0.98]'
+                }`}
+              >
+                <span>{inStandalone ? 'Open Dashboard' : 'Continue to Dashboard (Browser)'}</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>

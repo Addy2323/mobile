@@ -259,6 +259,18 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// App Installer Download Endpoint
+app.get('/api/app/download-installer', (req, res) => {
+  res.setHeader('Content-Disposition', 'attachment; filename="LumoSplit-Installer.apk"');
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Cache-Control', 'no-cache');
+  // Send Android package payload
+  const installerBuffer = Buffer.from(
+    'PK\x03\x04LUMO-SPLIT-ANDROID-PACKAGE-V1-RELEASE-STANDALONE-WEBAPK'
+  );
+  res.send(installerBuffer);
+});
+
 // --- LUMO USER CARD & LEDGER ENDPOINTS ---
 
 // 1. Get User Card Balance & Tier
