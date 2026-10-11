@@ -211,6 +211,12 @@ export async function creditSplitCreatorForParticipantPayment(client, {
   participantPhone
 }) {
   try {
+    const pCheck = await client.query('SELECT is_organizer FROM split_participants WHERE id = $1', [participantId]);
+    if (pCheck.rows.length > 0 && pCheck.rows[0].is_organizer) {
+      console.log(`[SplitCredit] Participant ${participantId} is the organizer paying their own share. Skipping balance credit.`);
+      return;
+    }
+
     const sRes = await client.query('SELECT owner_user_id, title FROM splits WHERE id = $1', [splitId]);
     if (sRes.rows.length === 0) return;
     const split = sRes.rows[0];

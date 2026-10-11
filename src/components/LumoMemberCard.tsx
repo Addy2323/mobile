@@ -51,21 +51,36 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
   const [copied, setCopied] = useState(false);
 
   const getCleanName = () => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('lumo_user_name') : null;
+    if (typeof window === 'undefined') return 'Member';
+    try {
+      const userStr = localStorage.getItem('lumo_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u?.full_name?.trim()) return u.full_name.trim();
+        if (u?.name?.trim()) return u.name.trim();
+      }
+    } catch {}
+    const raw = localStorage.getItem('lumo_user_name');
     const isBad =
       !raw ||
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ||
       raw.startsWith('user_') ||
-      /\d/.test(raw) ||
       raw.toLowerCase() === 'user' ||
       raw.trim().length < 2;
-    return isBad ? 'Given Mhema' : raw.trim();
+    return isBad ? 'LUMO Member' : raw.trim();
   };
 
   const getCleanPhone = () => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('lumo_user_phone') : null;
-    const isBad = !raw || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
-    if (isBad) return '+255 754 123 456';
+    if (typeof window === 'undefined') return '';
+    try {
+      const userStr = localStorage.getItem('lumo_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u?.phone) return u.phone;
+      }
+    } catch {}
+    const raw = localStorage.getItem('lumo_user_phone');
+    if (!raw) return '';
     if (raw.startsWith('+')) return raw;
     return `+255 ${raw.replace(/^0/, '')}`;
   };
@@ -105,7 +120,7 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
 
   const tierKey = balanceData?.tier || 'PRO';
   const tierStyle = VIP_TIER_STYLES[tierKey] || VIP_TIER_STYLES.PRO;
-  const last4 = balanceData?.accountRef ? balanceData.accountRef.slice(-4) : '2038';
+  const last4 = balanceData?.accountRef ? balanceData.accountRef.slice(-4) : '••••';
 
   const handleCopyAccountRef = (e: React.MouseEvent) => {
     e.stopPropagation();

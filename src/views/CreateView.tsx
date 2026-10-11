@@ -9,6 +9,7 @@ import { supabase, type Merchant, type Split } from '@/lib/supabase';
 import TrustStrip from '@/components/TrustStrip';
 import { formatMoney, formatDateTime } from '@/lib/utils';
 import { CategoryIcon } from '@/components/CategoryIcon';
+import { getOwnerId } from '@/lib/ownerId';
 
 type CreateViewProps = { onComplete: (split: Split) => void; onCancel: () => void };
 type DestinationType = 'merchant' | 'reference' | 'recipient';
@@ -300,13 +301,14 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
       title: title.trim(), category, total_amount: totalNum, mode: splitMode, organizer_name: organizerName.trim(), organizer_phone: organizerPhone.trim(),
       merchant_id: selectedMerchant?.id || null, status: 'ACTIVE', settlement_percent: 0, amount_paid: 0, participant_count: peopleCount,
       due_at: dueDate ? new Date(dueDate).toISOString() : null,
+      owner_user_id: getOwnerId(),
       note: [note.trim(), `Fee paid by ${feePayer}. ${allowCash ? 'Cash payments allowed.' : 'Cash payments not allowed.'}`].filter(Boolean).join(' '),
     }).select().maybeSingle();
     if (splitError || !splitData) { setCreating(false); setError('We could not create this split. Please try again.'); return; }
     const split = splitData as Split;
     const allParticipants = [
-      { split_id: split.id, name: organizerName.trim(), phone: organizerPhone.trim() || null, allocation_amount: organizerAmount, amount_paid: 0, status: 'PENDING', is_organizer: true },
-      ...validParticipants.map((participant, index) => ({ split_id: split.id, name: participant.name.trim(), phone: participant.phone.trim() || null, allocation_amount: participantAmounts[index] || 0, amount_paid: 0, status: 'PENDING', is_organizer: false })),
+      { split_id: split.id, name: organizerName.trim(), phone: organizerPhone.trim() || null, allocation_amount: organizerAmount, amount_paid: 0, status: 'PENDING', is_organizer: true, contribution_token: crypto.randomUUID() },
+      ...validParticipants.map((participant, index) => ({ split_id: split.id, name: participant.name.trim(), phone: participant.phone.trim() || null, allocation_amount: participantAmounts[index] || 0, amount_paid: 0, status: 'PENDING', is_organizer: false, contribution_token: crypto.randomUUID() })),
     ];
     const { error: participantError } = await supabase.from('split_participants').insert(allParticipants);
     if (participantError) { setCreating(false); setError('The split was created, but people could not be added. Please open it and try again.'); return; }
@@ -323,10 +325,11 @@ export default function CreateView({ onComplete, onCancel }: CreateViewProps) {
     const { data: splitData, error: splitError } = await supabase.from('splits').insert({
       title: payload.title.trim(), category: payload.category, total_amount: payload.amount, mode: 'equal', organizer_name: organizerName.trim(), organizer_phone: organizerPhone.trim(),
       status: 'ACTIVE', settlement_percent: 0, amount_paid: 0, participant_count: 1, due_at: dueDate ? new Date(dueDate).toISOString() : null, note: payload.note,
+      owner_user_id: getOwnerId(),
     }).select().maybeSingle();
     if (splitError || !splitData) { setCreating(false); setError('Could not create this experience. Please try again.'); return; }
     const split = splitData as Split;
-    await supabase.from('split_participants').insert({ split_id: split.id, name: organizerName.trim(), phone: organizerPhone.trim() || null, allocation_amount: payload.amount, amount_paid: 0, status: 'PENDING', is_organizer: true });
+    await supabase.from('split_participants').insert({ split_id: split.id, name: organizerName.trim(), phone: organizerPhone.trim() || null, allocation_amount: payload.amount, amount_paid: 0, status: 'PENDING', is_organizer: true, contribution_token: crypto.randomUUID() });
     setCreatedSplit(split);
     setCreating(false);
     setStep(8);

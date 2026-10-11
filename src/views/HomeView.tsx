@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase, type Split, type Merchant } from '@/lib/supabase';
 import { formatMoney, timeAgo } from '@/lib/utils';
-import { fetchUserCardBalance, fetchLedgerTransactions, type UserCardBalance, type LedgerTransaction } from '@/lib/ledgerApi';
+import { fetchUserCardBalance, fetchLedgerTransactions, fetchUserSplits, type UserCardBalance, type LedgerTransaction } from '@/lib/ledgerApi';
 import { DepositModal } from '@/components/DepositModal';
 import { WithdrawModal } from '@/components/WithdrawModal';
 import { VipTierShowcase } from '@/components/VipTierShowcase';
@@ -32,7 +32,7 @@ export default function HomeView({ onSplitClick, onCreate, onNavigateQuickAction
 
   // Dynamic user name and phone from localStorage
   const getCardholderName = () => {
-    if (typeof window === 'undefined') return 'Ado Myamba';
+    if (typeof window === 'undefined') return 'LUMO Member';
     try {
       const userStr = localStorage.getItem('lumo_user');
       if (userStr) {
@@ -44,13 +44,20 @@ export default function HomeView({ onSplitClick, onCreate, onNavigateQuickAction
         return raw.trim();
       }
     } catch (e) {}
-    return 'Ado Myamba';
+    return 'LUMO Member';
   };
 
   const getCardholderPhone = () => {
-    if (typeof window === 'undefined') return '+255 7XX XXX XXX';
+    if (typeof window === 'undefined') return '';
+    try {
+      const userStr = localStorage.getItem('lumo_user');
+      if (userStr) {
+        const parsed = JSON.parse(userStr);
+        if (parsed.phone) return parsed.phone;
+      }
+    } catch (e) {}
     const raw = localStorage.getItem('lumo_user_phone');
-    if (!raw) return '+255 7XX XXX XXX';
+    if (!raw) return '';
     if (raw.startsWith('+')) return raw;
     return `+255 ${raw.replace(/^0/, '').slice(0, 3)} XXX XXX`;
   };
@@ -64,13 +71,13 @@ export default function HomeView({ onSplitClick, onCreate, onNavigateQuickAction
       const [bal, txs, splitRes] = await Promise.allSettled([
         fetchUserCardBalance(),
         fetchLedgerTransactions(),
-        supabase.from('splits').select('*, merchant:merchants(*)').order('created_at', { ascending: false }).limit(5),
+        fetchUserSplits(),
       ]);
 
       if (bal.status === 'fulfilled') setBalanceData(bal.value);
       if (txs.status === 'fulfilled') setLedgerTxs(txs.value || []);
-      if (splitRes.status === 'fulfilled' && splitRes.value.data) {
-        setSplits(splitRes.value.data as any);
+      if (splitRes.status === 'fulfilled' && splitRes.value) {
+        setSplits(splitRes.value as any);
       }
     } catch (e) {
       console.warn('Dashboard data load error:', e);
@@ -88,7 +95,7 @@ export default function HomeView({ onSplitClick, onCreate, onNavigateQuickAction
       const clean = balanceData.accountRef.replace(/\D/g, '');
       if (clean.length >= 4) return clean.slice(-4);
     }
-    return '2038';
+    return '••••';
   }, [balanceData]);
 
   const availableBalance = balanceData?.availableBalance ?? 0;

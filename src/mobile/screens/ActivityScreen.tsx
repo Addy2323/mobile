@@ -5,6 +5,8 @@ import { formatMoney, formatDate } from '@/lib/utils';
 import StatusBadge from '@/components/StatusBadge';
 import { getTranslation, type Language } from '@/lib/i18n';
 import { CardSkeleton } from '../components/SkeletonLoader';
+import { fetchUserSplits } from '@/lib/ledgerApi';
+import { getOwnerId } from '@/lib/ownerId';
 
 interface ActivityScreenProps {
   onSelectSplit: (split: Split) => void;
@@ -22,16 +24,21 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({ onSelectSplit, l
 
   async function fetchSplits() {
     try {
-      const { data } = await supabase
-        .from('splits')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (data) {
-        setSplits(data);
-      }
+      const data = await fetchUserSplits();
+      setSplits(data || []);
     } catch (err) {
       console.error('Error loading activity:', err);
+      try {
+        const ownerId = getOwnerId();
+        const { data } = await supabase
+          .from('splits')
+          .select('*')
+          .eq('owner_user_id', ownerId)
+          .order('created_at', { ascending: false });
+        setSplits(data || []);
+      } catch (e) {
+        setSplits([]);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

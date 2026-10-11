@@ -26,24 +26,24 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, title
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       {/* Sheet Content */}
-      <div className="relative w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col animate-slide-up z-10 pb-safe">
+      <div className="relative w-full max-w-lg mx-auto bg-[#0C181A] border-t border-white/10 rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col animate-slide-up z-10 pb-safe text-slate-100">
         {/* Drag Handle Bar */}
         <div className="w-full flex flex-col items-center pt-3 pb-2 cursor-grab active:cursor-grabbing" onClick={onClose}>
-          <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
+          <div className="w-12 h-1.5 bg-white/20 rounded-full" />
         </div>
 
         {/* Header */}
         {title && (
-          <div className="px-5 pb-3 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          <div className="px-5 pb-3 border-b border-white/10 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white">{title}</h3>
             <button 
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-white/10 transition-colors"
               aria-label="Close sheet"
             >
               <X className="w-5 h-5" />

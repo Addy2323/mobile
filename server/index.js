@@ -12,6 +12,9 @@ import { SnippeReconciliationJob } from './reconciliationJob.js';
 import { createAdminRouter } from './adminRoutes.js';
 import { createAuthRouter } from './authRoutes.js';
 import { createReleaseRouter } from './releaseRoutes.js';
+import { createMeRouter } from './meRoutes.js';
+import { getUserJwtSecret } from './userAuth.js';
+import jwt from 'jsonwebtoken';
 import { smsService } from './smsService.js';
 import { LedgerService, calculateVipTier } from './ledgerService.js';
 
@@ -169,6 +172,8 @@ async function autoMigrateOnStartup(p) {
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS resource_id VARCHAR(128);
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS merchant_reference VARCHAR(128);
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMPTZ;
+      ALTER TABLE split_participants ADD COLUMN IF NOT EXISTS contribution_token VARCHAR(64);
+      CREATE INDEX IF NOT EXISTS idx_split_participants_contrib_token ON split_participants(contribution_token);
 
       ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS signature_verified BOOLEAN DEFAULT false;
       ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ DEFAULT NOW();
@@ -247,6 +252,27 @@ app.post('/api/auth/register', authIpLimit(900000, 30), authPhoneLimit('register
 app.post('/api/auth/check-phone', authIpLimit(900000, 60));
 app.use('/api/auth', createAuthRouter(pool));
 app.use('/api/releases', createReleaseRouter(pool));
+app.use('/api/me', createMeRouter(pool));
+
+// Secure helper to resolve authenticated user identity from Bearer token or explicit user ID
+export function resolveUser(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], getUserJwtSecret());
+      if (decoded && (decoded.id || decoded.userId)) {
+        return decoded.id || decoded.userId;
+      }
+    } catch (e) {}
+  }
+  const xUid = req.headers['x-user-id'];
+  if (xUid && xUid !== 'user_demo_101') return xUid;
+  const qUid = req.query?.user_id;
+  if (qUid && qUid !== 'user_demo_101') return qUid;
+  const bUid = req.body?.user_id;
+  if (bUid && bUid !== 'user_demo_101') return bUid;
+  return null;
+}
 
 // Block money-moving and destructive legacy routes unless the admin key is sent
 const safeEq = (x, y) => {
@@ -305,7 +331,10 @@ app.get('/api/app/download-installer', (req, res) => {
 app.get('/api/user/card-balance', async (req, res) => {
   const client = await pool.connect();
   try {
-    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     await client.query('BEGIN');
     const balance = await LedgerService.getOrCreateUserBalance(client, userId);
     await client.query('COMMIT');
@@ -332,7 +361,10 @@ app.get('/api/user/card-balance', async (req, res) => {
 // 2. Get User Ledger Transactions
 app.get('/api/user/ledger-transactions', async (req, res) => {
   try {
-    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const { rows } = await pool.query(
       'SELECT * FROM ledger_transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
       [userId]
@@ -347,7 +379,10 @@ app.get('/api/user/ledger-transactions', async (req, res) => {
 app.post('/api/user/deposits/initiate', async (req, res) => {
   const client = await pool.connect();
   try {
-    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const { amount, phone, provider = 'M-Pesa' } = req.body;
     const numAmount = Number(amount);
 
@@ -426,7 +461,10 @@ app.post('/api/user/deposits/initiate', async (req, res) => {
 app.get('/api/user/deposits/status', async (req, res) => {
   const client = await pool.connect();
   try {
-    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const depositRef = req.query.deposit_ref;
     const providerTxRef = req.query.provider_tx_ref;
 
@@ -536,7 +574,10 @@ app.get('/api/user/deposits/status', async (req, res) => {
 app.post('/api/user/withdrawals/request', async (req, res) => {
   const client = await pool.connect();
   try {
-    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const { amount, destination_type = 'MOBILE_MONEY', destination_details } = req.body;
     const numAmount = Number(amount);
 
@@ -595,7 +636,10 @@ app.post('/api/user/withdrawals/request', async (req, res) => {
 // 5. Get User Withdrawals
 app.get('/api/user/withdrawals', async (req, res) => {
   try {
-    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const { rows } = await pool.query(
       'SELECT * FROM withdrawal_requests WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
@@ -619,7 +663,10 @@ app.get('/api/utility/providers', (req, res) => {
 app.post('/api/user/bill-payments', async (req, res) => {
   const client = await pool.connect();
   try {
-    const userId = req.body.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
     const { provider = 'TANESCO', account_meter_number, amount } = req.body;
     const numAmount = Number(amount);
 
@@ -1292,7 +1339,10 @@ app.get('/api/public/links/:token/contributors', async (req, res) => {
 // GET UNIFIED USER RECENT ACTIVITIES (SPLITS + LINK PAYMENTS + CREDITS)
 app.get('/api/user/activities', async (req, res) => {
   try {
-    const userId = req.query.user_id || req.headers['x-user-id'] || 'user_demo_101';
+    const userId = resolveUser(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
 
     // 1. Fetch public link payments received by this user
     const linkPayRes = await pool.query(
@@ -1303,13 +1353,15 @@ app.get('/api/user/activities', async (req, res) => {
       [userId]
     );
 
-    // 2. Fetch splits
+    // 2. Fetch splits strictly owned by this user
     const splitRes = await pool.query(
       `SELECT s.id, s.title, s.total_amount, s.amount_paid, s.status, s.ref_code, s.participant_count, s.settlement_percent, s.created_at, 'SPLIT' as activity_type,
               row_to_json(m.*) as merchant
        FROM splits s
        LEFT JOIN merchants m ON s.merchant_id = m.id
-       ORDER BY s.created_at DESC LIMIT 10`
+       WHERE s.owner_user_id = $1
+       ORDER BY s.created_at DESC LIMIT 10`,
+      [userId]
     );
 
     res.json({
@@ -1635,6 +1687,8 @@ app.post('/api/splits', async (req, res) => {
       items = []
     } = req.body;
 
+    const resolvedOwnerId = resolveUser(req) || owner_user_id || null;
+
     let destRecord = null;
     if (destination_id) {
       const dRes = await client.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
@@ -1647,7 +1701,7 @@ app.post('/api/splits', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
          RETURNING *`,
         [
-          owner_user_id,
+          resolvedOwnerId,
           validated.type,
           validated.provider || 'MOBILE_MONEY',
           label,
@@ -1687,7 +1741,7 @@ app.post('/api/splits', async (req, res) => {
       0,
       participants.length,
       generatedRef,
-      owner_user_id,
+      resolvedOwnerId,
       destRecord ? destRecord.id : null,
       destSnapshot
     ]);
@@ -1698,21 +1752,23 @@ app.post('/api/splits', async (req, res) => {
     const participantIdMap = {};
 
     for (const p of participants) {
+      const contribToken = 'ct_' + crypto.randomUUID().replace(/-/g, '');
       const pRes = await client.query(
-        `INSERT INTO split_participants (split_id, name, phone, allocation_amount, amount_paid, status, paid_at, payment_ref, is_organizer, claim_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO split_participants (split_id, name, phone, allocation_amount, amount_paid, status, paid_at, payment_ref, is_organizer, claim_status, contribution_token)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           createdSplit.id,
           p.name,
           p.phone || null,
           p.allocation_amount || 0,
-          p.amount_paid || 0,
-          p.status || 'PENDING',
-          p.paid_at || null,
-          p.payment_ref || null,
+          0,
+          'PENDING',
+          null,
+          null,
           p.is_organizer || false,
-          p.claim_status || 'none'
+          p.claim_status || 'none',
+          contribToken
         ]
       );
       createdParticipants.push(pRes.rows[0]);
@@ -1726,7 +1782,6 @@ app.post('/api/splits', async (req, res) => {
       const assignedId = item.assigned_participant_id
         ? (participantIdMap[item.assigned_participant_id] || item.assigned_participant_id)
         : null;
-
       const itemRes = await client.query(
         `INSERT INTO allocation_items (split_id, item_name, qty, price, assigned_participant_id)
          VALUES ($1, $2, $3, $4, $5)
@@ -1753,13 +1808,14 @@ app.post('/api/splits', async (req, res) => {
       for (const p of createdParticipants) {
         if (p.phone && String(p.phone).trim().length >= 9) {
           try {
+            const personalPaymentLink = `${appOrigin}/s/${generatedRef}?c=${p.contribution_token || p.id}`;
             await smsService.sendSplitInvite({
               phone: p.phone,
               participantName: p.name,
               organizerName: createdSplit.organizer_name,
               title: createdSplit.title,
               amount: p.allocation_amount,
-              paymentLink
+              paymentLink: personalPaymentLink
             });
             console.log(`[Split SMS] Invite SMS dispatched to ${p.name} (${p.phone}) for split ${generatedRef}`);
           } catch (smsErr) {
@@ -2040,10 +2096,10 @@ app.post('/api/payment-attempts', async (req, res) => {
 app.post('/api/payments/initiate', async (req, res) => {
   const client = await pool.connect();
   try {
-    const { split_participant_id, phone, payment_method = 'M-Pesa' } = req.body;
+    const participantIdentifier = req.body.split_participant_id || req.body.contribution_token || req.body.participant_id;
 
-    if (!split_participant_id || !phone) {
-      return res.status(400).json({ error: 'split_participant_id and phone are required.' });
+    if (!participantIdentifier || !phone) {
+      return res.status(400).json({ error: 'split_participant_id (or contribution_token) and phone are required.' });
     }
 
     // SECURITY: Fetch authoritative allocation_amount directly from database! Ignore frontend amount.
@@ -2051,8 +2107,8 @@ app.post('/api/payments/initiate', async (req, res) => {
       `SELECT p.*, s.title AS split_title, s.id AS split_id, s.merchant_id
        FROM split_participants p
        JOIN splits s ON p.split_id = s.id
-       WHERE p.id = $1`,
-      [split_participant_id]
+       WHERE p.id::text = $1 OR p.contribution_token = $1`,
+      [String(participantIdentifier)]
     );
 
     if (pRes.rows.length === 0) {
@@ -2060,20 +2116,21 @@ app.post('/api/payments/initiate', async (req, res) => {
     }
 
     const participant = pRes.rows[0];
+    const actualParticipantId = participant.id;
 
     if (participant.status === 'PAID') {
       return res.status(400).json({ error: 'Participant obligation has already been PAID.' });
     }
 
     const expectedAmount = parseInt(participant.allocation_amount, 10);
-    const idempotencyKey = `idem_${split_participant_id}_${Date.now()}`;
+    const idempotencyKey = `idem_${actualParticipantId}_${Date.now()}`;
 
     // Create PaymentIntent
     await client.query(
       `INSERT INTO payment_intents (split_participant_id, split_id, expected_amount, currency, status, idempotency_key, metadata)
        VALUES ($1, $2, $3, 'TZS', 'PENDING', $4, $5)
        ON CONFLICT (idempotency_key) DO NOTHING`,
-      [split_participant_id, participant.split_id, expectedAmount, idempotencyKey, { phone, payment_method }]
+      [actualParticipantId, participant.split_id, expectedAmount, idempotencyKey, { phone, payment_method }]
     );
 
     // Trigger Snippe Collection API
@@ -2081,7 +2138,7 @@ app.post('/api/payments/initiate', async (req, res) => {
       amount: expectedAmount,
       phone: phone,
       splitId: participant.split_id,
-      participantId: split_participant_id,
+      participantId: actualParticipantId,
       participantName: participant.name,
       idempotencyKey: idempotencyKey
     });
@@ -2091,7 +2148,7 @@ app.post('/api/payments/initiate', async (req, res) => {
       `INSERT INTO payment_attempts (split_participant_id, amount, provider, provider_tx_ref, status, payment_method, idempotency_key, requested_at)
        VALUES ($1, $2, 'SNIPPE', $3, 'PENDING', $4, $5, NOW())
        RETURNING *`,
-      [split_participant_id, expectedAmount, snippeRes.providerTxRef, payment_method, idempotencyKey]
+      [actualParticipantId, expectedAmount, snippeRes.providerTxRef, payment_method, idempotencyKey]
     );
 
     res.status(201).json({
@@ -2102,9 +2159,39 @@ app.post('/api/payments/initiate', async (req, res) => {
     });
   } catch (err) {
     console.error('Error initiating Snippe payment:', err);
-    res.status(500).json({ error: 'Could not start payment.' });
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// Endpoint to retrieve live Snippe Account Balance via /v1/payments/balance
+app.get('/api/payments/balance', async (req, res) => {
+  try {
+    const balanceData = await SnippePaymentProvider.getBalance();
+    res.json({
+      success: true,
+      provider: 'SNIPPE',
+      ...balanceData
+    });
+  } catch (err) {
+    console.error('Failed to retrieve Snippe balance:', err.message);
+    res.status(502).json({ error: 'Failed to retrieve balance from Snippe provider', details: err.message });
+  }
+});
+
+// Admin balance endpoint
+app.get('/api/admin/snippe-balance', async (req, res) => {
+  try {
+    const balanceData = await SnippePaymentProvider.getBalance();
+    res.json({
+      success: true,
+      provider: 'SNIPPE',
+      ...balanceData
+    });
+  } catch (err) {
+    console.error('Failed to retrieve Snippe balance for admin:', err.message);
+    res.status(502).json({ error: 'Failed to retrieve balance from Snippe provider', details: err.message });
   }
 });
 
@@ -2118,6 +2205,12 @@ export async function creditSplitCreatorForParticipantPayment(client, {
   participantPhone
 }) {
   try {
+    const pCheck = await client.query('SELECT is_organizer FROM split_participants WHERE id = $1', [participantId]);
+    if (pCheck.rows.length > 0 && pCheck.rows[0].is_organizer) {
+      console.log(`[SplitCredit] Participant ${participantId} is the organizer paying their own share. Skipping balance credit.`);
+      return;
+    }
+
     const sRes = await client.query('SELECT owner_user_id, title FROM splits WHERE id = $1', [splitId]);
     if (sRes.rows.length === 0) return;
     const split = sRes.rows[0];
@@ -2193,83 +2286,18 @@ app.post('/api/payments/webhooks/snippe', async (req, res) => {
     );
 
     const metadata = eventPayload.data?.metadata || eventPayload.metadata || {};
-    const participantId = metadata.participant_id;
+    const participantId = metadata.participant_id || metadata.split_participant_id;
     const providerTxRef = eventPayload.data?.reference || eventPayload.reference;
+    const orderId = eventPayload.data?.order_id || eventPayload.order_id || providerTxRef;
+    const amount = eventPayload.data?.amount || eventPayload.amount;
 
-    if (participantId) {
-      // Fetch participant details
-      const pRes = await client.query('SELECT * FROM split_participants WHERE id = $1 FOR UPDATE', [participantId]);
-      if (pRes.rows.length > 0) {
-        const participant = pRes.rows[0];
-        const splitId = participant.split_id;
-
-        // Update Participant to PAID
-        await client.query(
-          `UPDATE split_participants
-           SET status = 'PAID', amount_paid = allocation_amount, paid_at = NOW(), payment_ref = $1
-           WHERE id = $2`,
-          [providerTxRef || 'SNP-CONFIRMED', participantId]
-        );
-
-        // Update PaymentAttempt to SUCCESS
-        await client.query(
-          `UPDATE payment_attempts
-           SET status = 'COMPLETED', completed_at = NOW()
-           WHERE split_participant_id = $1 AND status = 'PENDING'`,
-          [participantId]
-        );
-
-        // Credit the organizer's available balance in real time
-        await creditSplitCreatorForParticipantPayment(client, {
-          splitId,
-          participantId,
-          amountPaid: participant.allocation_amount,
-          providerTxRef: providerTxRef || 'SNP-CONFIRMED',
-          participantName: participant.name,
-          participantPhone: participant.phone
-        });
-
-        // Recalculate Split Total Paid & Settlement Percentage
-        const pSumRes = await client.query(
-          'SELECT SUM(amount_paid) as total_paid, SUM(allocation_amount) as total_alloc FROM split_participants WHERE split_id = $1',
-          [splitId]
-        );
-
-        const totalPaid = parseInt(pSumRes.rows[0].total_paid || '0', 10);
-        const totalAlloc = parseInt(pSumRes.rows[0].total_alloc || '0', 10);
-        const settlementPercent = totalAlloc > 0 ? Math.min(100, Math.round((totalPaid / totalAlloc) * 100)) : 0;
-
-        let newStatus = 'ACTIVE';
-        if (settlementPercent >= 100) {
-          newStatus = 'SETTLED';
-        } else if (totalPaid > 0) {
-          newStatus = 'PARTIALLY_PAID';
-        }
-
-        await client.query(
-          'UPDATE splits SET amount_paid = $1, settlement_percent = $2, status = $3 WHERE id = $4',
-          [totalPaid, settlementPercent, newStatus, splitId]
-        );
-
-        // AUTOMATED SETTLEMENT DISPATCH: If split is 100% SETTLED, trigger payout to merchant
-        if (newStatus === 'SETTLED' && process.env.ALLOW_LEGACY_PAYOUT === 'true') {
-          console.log(`🎉 Split ${splitId} reached 100% SETTLED! Dispatching Automated Snippe Payout...`);
-          const payoutRes = await SnippePaymentProvider.sendPayout({
-            splitId: splitId,
-            amount: totalPaid,
-            channel: 'mobile',
-            recipientPhone: '255754123456',
-            recipientName: 'Golden Hotel / Verified Merchant'
-          });
-
-          await client.query(
-            `INSERT INTO payout_records (split_id, amount, fee, channel, recipient_reference, provider_payout_id, status)
-             VALUES ($1, $2, 1500, 'mobile', '255754123456', $3, $4)`,
-            [splitId, totalPaid, payoutRes.payoutId, payoutRes.status]
-          );
-        }
-      }
-    }
+    // Reconcile participant payment with robust fallback lookup & idempotency
+    await applySuccessfulPayment(client, {
+      orderId: orderId || providerTxRef,
+      participantId: participantId,
+      amountPaid: amount,
+      providerTxRef: providerTxRef || 'SNP-CONFIRMED'
+    });
 
     // Handle DEPOSIT_WALLET payments (LUMO Member Card Deposits)
     if (metadata.split_id === 'DEPOSIT_WALLET' || metadata.is_deposit) {
@@ -3008,4 +3036,6 @@ setInterval(() => {
 app.listen(port, () => {
   console.log(`⚡ LUMO Split PostgreSQL Backend API running on http://localhost:${port}`);
 });
+
+export { app, pool };
 

@@ -25,6 +25,7 @@ import { getTranslation, type Language } from '@/lib/i18n';
 import { BottomSheet } from '../components/BottomSheet';
 import { PaymentDestinationSelector, type PaymentDestinationConfig } from '@/components/PaymentDestinationSelector';
 import { getOwnerId } from '@/lib/ownerId';
+import { authFetch } from '@/lib/ledgerApi';
 
 interface CreateSplitScreenProps {
   onComplete: (split: Split) => void;
@@ -42,17 +43,13 @@ interface Contact {
   amount?: number;
 }
 
-const INITIAL_CONTACTS: Contact[] = [
-  { id: '1', name: 'Kelvin', phone: '+255 712 345 678', selected: true },
-  { id: '2', name: 'Asia', phone: '+255 756 432 111', selected: true },
-  { id: '3', name: 'Joseph', phone: '+255 784 321 987', selected: true },
-];
+const INITIAL_CONTACTS: Contact[] = [];
 
 export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete, onCancel, language }) => {
   const [step, setStep] = useState<number>(1);
   const [category, setCategory] = useState<string>('Food & Drinks');
-  const [title, setTitle] = useState<string>('Dinner at The View');
-  const [totalAmount, setTotalAmount] = useState<string>('120000');
+  const [title, setTitle] = useState<string>('');
+  const [totalAmount, setTotalAmount] = useState<string>('');
   const [method, setMethod] = useState<SplitMethod>('equal');
   const [contacts, setContacts] = useState<Contact[]>(INITIAL_CONTACTS);
 
@@ -105,8 +102,23 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
   const handleCreateSplit = async () => {
     const refCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const organizerName = localStorage.getItem('lumo_user_name') || 'Given Mhema';
-    const organizerPhone = localStorage.getItem('lumo_user_phone') || '+255 754 123 456';
+    let organizerName = 'Organizer';
+    let organizerPhone = '';
+    try {
+      const uStr = localStorage.getItem('lumo_user');
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u.full_name || u.name) organizerName = u.full_name || u.name;
+        if (u.phone) organizerPhone = u.phone;
+      }
+    } catch {}
+    if (organizerName === 'Organizer') {
+      const stored = localStorage.getItem('lumo_user_name');
+      if (stored && !stored.startsWith('user_')) organizerName = stored;
+    }
+    if (!organizerPhone) {
+      organizerPhone = localStorage.getItem('lumo_user_phone') || '';
+    }
 
     const newSplitPayload = {
       title: title || 'Split Bill',
@@ -130,8 +142,8 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         name: organizerName + ' (You)',
         phone: organizerPhone,
         allocation_amount: equalShare,
-        amount_paid: equalShare,
-        status: 'PAID',
+        amount_paid: 0,
+        status: 'PENDING',
         is_organizer: true,
       },
       ...selectedContacts.map((c) => ({
@@ -145,7 +157,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
     ];
 
     try {
-      const apiRes = await fetch('/api/splits', {
+      const apiRes = await authFetch('/api/splits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newSplitPayload, participants: participantRows }),
@@ -192,26 +204,26 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col justify-between p-4 pb-safe no-tap-highlight">
+    <div className="min-h-dvh bg-[#060D0E] text-slate-100 flex flex-col justify-between p-4 pb-safe no-tap-highlight">
       {/* Header */}
       {step < 6 && (
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between">
             <button
               onClick={() => (step === 1 ? onCancel() : setStep(step - 1))}
-              className="p-1.5 -ml-1 text-slate-600 rounded-full hover:bg-slate-100"
+              className="p-1.5 -ml-1 text-slate-400 rounded-full hover:bg-white/5 hover:text-white transition"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider">
+            <span className="text-xs font-extrabold text-[#00E599] uppercase tracking-wider">
               Step {step} of 5
             </span>
             <div className="w-6" />
           </div>
 
-          <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-indigo-600 transition-all duration-300"
+              className="h-full bg-gradient-to-r from-[#00E599] to-[#00C880] transition-all duration-300"
               style={{ width: `${(step / 5) * 100}%` }}
             />
           </div>
@@ -222,8 +234,8 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       {step === 1 && (
         <div className="flex-1 flex flex-col justify-between py-4 space-y-6">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900">{t('wherePaying')}</h2>
-            <p className="text-xs text-slate-500 mt-1">Choose a category for this split bill.</p>
+            <h2 className="text-xl font-extrabold text-white">{t('wherePaying')}</h2>
+            <p className="text-xs text-slate-400 mt-1">Choose a category for this split bill.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -236,19 +248,19 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                 }}
                 className={`p-4 rounded-2xl border-2 flex items-center space-x-3 transition-all ${
                   category === cat.name
-                    ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
+                    ? 'border-[#00E599] bg-[#00E599]/10 shadow-lg shadow-[#00E599]/10'
+                    : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                 }`}
               >
-                <div className={`p-2.5 rounded-xl ${cat.bg}`}>{cat.icon}</div>
-                <span className="font-bold text-slate-800 text-xs">{cat.name}</span>
+                <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-[#00E599]">{cat.icon}</div>
+                <span className="font-bold text-white text-xs">{cat.name}</span>
               </button>
             ))}
           </div>
 
           <button
             onClick={() => setStep(2)}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             {t('continue')}
           </button>
@@ -260,31 +272,31 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         <div className="flex-1 flex flex-col justify-between py-4 space-y-6">
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('billDetails')}</h2>
-              <p className="text-xs text-slate-500 mt-1">Enter total bill details and title.</p>
+              <h2 className="text-xl font-extrabold text-white">{t('billDetails')}</h2>
+              <p className="text-xs text-slate-400 mt-1">Enter total bill details and title.</p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Title / Purpose</label>
+                <label className="text-xs font-bold text-slate-400 mb-1.5 block">Title / Purpose</label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Dinner at The View"
-                  className="w-full px-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-bold text-slate-900 text-sm"
+                  className="w-full px-4 py-3.5 bg-[#0C181A] rounded-2xl border-2 border-white/10 focus:border-[#00E599] focus:outline-none font-bold text-white text-sm placeholder:text-slate-600 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 mb-1 block">Total Amount (TZS)</label>
+                <label className="text-xs font-bold text-slate-400 mb-1.5 block">Total Amount (TZS)</label>
                 <input
                   type="number"
                   inputMode="decimal"
                   value={totalAmount}
                   onChange={(e) => setTotalAmount(e.target.value)}
                   placeholder="120000"
-                  className="w-full px-4 py-3.5 bg-white rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none font-black text-xl text-slate-900"
+                  className="w-full px-4 py-3.5 bg-[#0C181A] rounded-2xl border-2 border-white/10 focus:border-[#00E599] focus:outline-none font-black text-xl text-[#00E599] placeholder:text-slate-600 transition-colors"
                 />
               </div>
             </div>
@@ -293,7 +305,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           <button
             onClick={() => setStep(3)}
             disabled={!totalAmount || parsedAmount <= 0}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 disabled:opacity-40 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             {t('continue')}
           </button>
@@ -305,70 +317,70 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         <div className="flex-1 flex flex-col justify-between py-4 space-y-6">
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('howToSplit')}</h2>
-              <p className="text-xs text-slate-500 mt-1">Select your preferred split allocation method.</p>
+              <h2 className="text-xl font-extrabold text-white">{t('howToSplit')}</h2>
+              <p className="text-xs text-slate-400 mt-1">Select your preferred split allocation method.</p>
             </div>
 
             <div className="space-y-2.5">
               <div
                 onClick={() => setMethod('equal')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'equal' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
+                  method === 'equal' ? 'border-[#00E599] bg-[#00E599]/10' : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl">
+                  <div className="p-2.5 bg-[#00E599]/20 text-[#00E599] rounded-xl">
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{t('equally')}</h4>
-                    <p className="text-xs text-slate-500">Split total bill into equal shares</p>
+                    <h4 className="font-bold text-white text-sm">{t('equally')}</h4>
+                    <p className="text-xs text-slate-400">Split total bill into equal shares</p>
                   </div>
                 </div>
-                {method === 'equal' && <Check className="w-5 h-5 text-indigo-600" />}
+                {method === 'equal' && <Check className="w-5 h-5 text-[#00E599]" />}
               </div>
 
               <div
                 onClick={() => setMethod('amount')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'amount' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
+                  method === 'amount' ? 'border-[#00E599] bg-[#00E599]/10' : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
+                  <div className="p-2.5 bg-blue-500/20 text-blue-400 rounded-xl">
                     <DollarSign className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{t('byAmount')}</h4>
-                    <p className="text-xs text-slate-500">Set specific custom amount per person</p>
+                    <h4 className="font-bold text-white text-sm">{t('byAmount')}</h4>
+                    <p className="text-xs text-slate-400">Set specific custom amount per person</p>
                   </div>
                 </div>
-                {method === 'amount' && <Check className="w-5 h-5 text-indigo-600" />}
+                {method === 'amount' && <Check className="w-5 h-5 text-[#00E599]" />}
               </div>
 
               <div
                 onClick={() => setMethod('items')}
                 className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                  method === 'items' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
+                  method === 'items' ? 'border-[#00E599] bg-[#00E599]/10' : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
+                  <div className="p-2.5 bg-[#00E599]/20 text-[#00E599] rounded-xl">
                     <Receipt className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{t('byItems')}</h4>
-                    <p className="text-xs text-slate-500">Assign individual receipt items to friends</p>
+                    <h4 className="font-bold text-white text-sm">{t('byItems')}</h4>
+                    <p className="text-xs text-slate-400">Assign individual receipt items to friends</p>
                   </div>
                 </div>
-                {method === 'items' && <Check className="w-5 h-5 text-indigo-600" />}
+                {method === 'items' && <Check className="w-5 h-5 text-[#00E599]" />}
               </div>
             </div>
           </div>
 
           <button
             onClick={() => setStep(4)}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             {t('continue')}
           </button>
@@ -381,38 +393,38 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">{t('addFriends')}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">{selectedContacts.length} selected (+ You)</p>
+                <h2 className="text-xl font-extrabold text-white">{t('addFriends')}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{selectedContacts.length} selected (+ You)</p>
               </div>
               <button
                 onClick={() => setIsAddingContact(true)}
-                className="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-xs flex items-center space-x-1"
+                className="px-3.5 py-1.5 bg-[#00E599]/15 border border-[#00E599]/30 text-[#00E599] font-bold rounded-xl text-xs flex items-center space-x-1.5 hover:bg-[#00E599]/25 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Contact</span>
               </button>
             </div>
 
-            <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-0.5">
               {contacts.map((contact) => (
                 <div
                   key={contact.id}
                   onClick={() => toggleContact(contact.id)}
                   className={`p-3.5 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all ${
-                    contact.selected ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-white'
+                    contact.selected ? 'border-[#00E599] bg-[#00E599]/10' : 'border-white/10 bg-[#0C181A] hover:border-white/20'
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-indigo-600 text-white font-extrabold rounded-xl flex items-center justify-center text-sm">
+                    <div className="w-10 h-10 bg-gradient-to-br from-[#00E599] to-[#00C880] text-[#060D0E] font-black rounded-xl flex items-center justify-center text-sm shadow-md shadow-[#00E599]/20">
                       {contact.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{contact.name}</h4>
-                      <p className="text-xs text-slate-500">{contact.phone}</p>
+                      <h4 className="font-bold text-white text-sm">{contact.name}</h4>
+                      <p className="text-xs text-slate-400">{contact.phone}</p>
                     </div>
                   </div>
-                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${contact.selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'}`}>
-                    {contact.selected && <Check className="w-4 h-4" />}
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${contact.selected ? 'border-[#00E599] bg-[#00E599] text-[#060D0E]' : 'border-white/20'}`}>
+                    {contact.selected && <Check className="w-4 h-4 stroke-[3]" />}
                   </div>
                 </div>
               ))}
@@ -422,7 +434,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
           <button
             onClick={() => setStep(5)}
             disabled={selectedContacts.length === 0}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 disabled:opacity-40 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             {t('continue')} ({totalPeople} People Total)
           </button>
@@ -434,24 +446,24 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
         <div className="flex-1 flex flex-col justify-between py-4 space-y-4">
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('splitPreview')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Review summary and select payment destination.</p>
+              <h2 className="text-xl font-extrabold text-white">{t('splitPreview')}</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Review summary and select payment destination.</p>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
-              <div className="text-center space-y-1 pb-3 border-b border-slate-100">
-                <span className="text-xs font-semibold text-slate-500 uppercase">{title}</span>
-                <h3 className="text-2xl font-black text-slate-900">{formatMoney(parsedAmount)}</h3>
-                <p className="text-xs font-bold text-indigo-600">
+            <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-4">
+              <div className="text-center space-y-1 pb-4 border-b border-white/10">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</span>
+                <h3 className="text-3xl font-black text-white">{formatMoney(parsedAmount)}</h3>
+                <p className="text-xs font-bold text-[#00E599]">
                   {totalPeople} people · {formatMoney(equalShare)} each
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {selectedContacts.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between text-xs font-medium text-slate-700">
+                  <div key={c.id} className="flex items-center justify-between text-xs font-medium text-slate-300">
                     <span>{c.name}</span>
-                    <span>{formatMoney(equalShare)}</span>
+                    <span className="font-bold text-white">{formatMoney(equalShare)}</span>
                   </div>
                 ))}
               </div>
@@ -469,7 +481,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
           <button
             onClick={handleCreateSplit}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             {t('createSplitBtn')}
           </button>
@@ -480,24 +492,24 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       {step === 6 && (
         <div className="flex-1 flex flex-col justify-between py-6 text-center space-y-6">
           <div className="my-auto space-y-6">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <Check className="w-10 h-10" />
+            <div className="w-20 h-20 bg-[#00E599]/20 text-[#00E599] border border-[#00E599]/30 rounded-3xl flex items-center justify-center mx-auto shadow-xl shadow-[#00E599]/10">
+              <Check className="w-10 h-10 stroke-[2.5]" />
             </div>
 
             <div>
-              <h2 className="text-2xl font-extrabold text-slate-900">Split Bill Created!</h2>
-              <p className="text-slate-500 text-xs mt-1 max-w-xs mx-auto">
+              <h2 className="text-2xl font-extrabold text-white">Split Bill Created!</h2>
+              <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto">
                 Share this link with participants to collect contributions into your specified destination.
               </p>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
-              <div className="p-3 bg-slate-50 rounded-2xl text-xs font-mono font-bold text-slate-700 truncate border border-slate-200">
+            <div className="bg-[#0C181A] p-5 rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <div className="p-3.5 bg-[#060D0E] rounded-2xl text-xs font-mono font-bold text-[#00E599] truncate border border-white/10">
                 {shareUrl}
               </div>
 
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-xs font-bold">
-                <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-2 bg-[#00E599]/10 border border-[#00E599]/30 text-[#00E599] p-3 rounded-2xl text-xs font-bold">
+                <Smartphone className="w-4 h-4 text-[#00E599] shrink-0" />
                 <span>SMS invites automatically dispatched via Meseji</span>
               </div>
 
@@ -508,7 +520,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                   )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-2 text-sm"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-2 text-sm transition"
                 >
                   <MessageCircle className="w-5 h-5" />
                   <span>{t('shareViaWhatsApp')}</span>
@@ -517,17 +529,17 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
                 <button
                   onClick={handleResendSms}
                   disabled={smsSending}
-                  className="w-full py-3 bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs hover:bg-slate-800 transition"
+                  className="w-full py-3 bg-white/5 border border-white/10 text-white font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs hover:bg-white/10 transition"
                 >
-                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <Smartphone className="w-4 h-4 text-[#00E599]" />
                   <span>{smsSending ? 'Sending SMS...' : smsSent ? 'SMS Resent ✓' : 'Resend SMS via Meseji'}</span>
                 </button>
 
                 <button
                   onClick={copyToClipboard}
-                  className="w-full py-3 bg-white border border-slate-200 text-slate-800 font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs"
+                  className="w-full py-3 bg-white/5 border border-white/10 text-slate-300 font-bold rounded-2xl flex items-center justify-center space-x-2 text-xs hover:bg-white/10 transition"
                 >
-                  <Copy className="w-4 h-4 text-indigo-600" />
+                  <Copy className="w-4 h-4 text-[#00E599]" />
                   <span>{copied ? t('linkCopied') : t('copyLink')}</span>
                 </button>
               </div>
@@ -536,7 +548,7 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
 
           <button
             onClick={() => createdSplit && onComplete(createdSplit)}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg transition-all"
+            className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 text-[#060D0E] font-black rounded-2xl shadow-xl shadow-[#00E599]/20 transition-all"
           >
             Done & View Split Status
           </button>
@@ -547,32 +559,32 @@ export const CreateSplitScreen: React.FC<CreateSplitScreenProps> = ({ onComplete
       <BottomSheet isOpen={isAddingContact} onClose={() => setIsAddingContact(false)} title="Add Custom Contact">
         <form onSubmit={handleAddCustomContact} className="space-y-4 pt-1">
           <div>
-            <label className="text-xs font-bold text-slate-600 mb-1 block">Friend's Name</label>
+            <label className="text-xs font-bold text-slate-400 mb-1.5 block">Friend's Name</label>
             <input
               type="text"
               value={newContactName}
               onChange={(e) => setNewContactName(e.target.value)}
               placeholder="e.g. Baraka Juma"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-600"
+              className="w-full px-4 py-3 bg-[#060D0E] border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-[#00E599]"
               autoFocus
             />
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-600 mb-1 block">Phone Number</label>
+            <label className="text-xs font-bold text-slate-400 mb-1.5 block">Phone Number</label>
             <input
               type="tel"
               inputMode="tel"
               value={newContactPhone}
               onChange={(e) => setNewContactPhone(e.target.value)}
               placeholder="07XX XXX XXX"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-600"
+              className="w-full px-4 py-3 bg-[#060D0E] border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-[#00E599]"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-xl shadow hover:bg-indigo-700 transition-colors"
+            className="w-full py-3.5 bg-gradient-to-r from-[#00E599] to-[#00C880] text-[#060D0E] font-black rounded-xl shadow-lg shadow-[#00E599]/20 hover:brightness-105 transition-all"
           >
             Add Contact
           </button>

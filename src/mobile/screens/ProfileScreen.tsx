@@ -18,22 +18,39 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenNotifications,
   onSignOut,
 }) => {
-  const sanitizeName = (val: string | null) => {
-    if (!val || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) || val.startsWith('user_')) {
-      return 'Given Mhema';
+  const getInitialName = () => {
+    try {
+      const uStr = localStorage.getItem('lumo_user');
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u?.full_name?.trim()) return u.full_name.trim();
+        if (u?.name?.trim()) return u.name.trim();
+      }
+    } catch {}
+    const val = localStorage.getItem('lumo_user_name');
+    if (val && !val.startsWith('user_') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+      return val.trim();
     }
-    return val;
+    return 'LUMO Member';
   };
 
-  const sanitizePhone = (val: string | null) => {
-    if (!val || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
-      return '0754 123 456';
+  const getInitialPhone = () => {
+    try {
+      const uStr = localStorage.getItem('lumo_user');
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u?.phone) return u.phone;
+      }
+    } catch {}
+    const val = localStorage.getItem('lumo_user_phone');
+    if (val && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+      return val;
     }
-    return val;
+    return '';
   };
 
-  const [userName, setUserName] = useState(() => sanitizeName(localStorage.getItem('lumo_user_name')));
-  const [userPhone, setUserPhone] = useState(() => sanitizePhone(localStorage.getItem('lumo_user_phone')));
+  const [userName, setUserName] = useState(getInitialName);
+  const [userPhone, setUserPhone] = useState(getInitialPhone);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState(userName);
   const [editPhone, setEditPhone] = useState(userPhone);
@@ -53,12 +70,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanN = editName.trim() || 'Given Mhema';
-    const cleanP = editPhone.trim() || '0754 123 456';
+    const cleanN = editName.trim() || 'LUMO Member';
+    const cleanP = editPhone.trim();
     setUserName(cleanN);
     setUserPhone(cleanP);
     localStorage.setItem('lumo_user_name', cleanN);
-    localStorage.setItem('lumo_user_phone', cleanP);
+    if (cleanP) localStorage.setItem('lumo_user_phone', cleanP);
     window.dispatchEvent(new Event('lumo_user_profile_updated'));
     setShowEditModal(false);
   };

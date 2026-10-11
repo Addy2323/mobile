@@ -366,11 +366,12 @@ export class SnippePaymentProvider {
 
       return {
         success: true,
+        balance: availableVal,
         availableBalance: availableVal,
-        currency: 'TZS'
+        currency: data.currency || 'TZS'
       };
     } catch {
-      return { success: false, availableBalance: 0, currency: 'TZS' };
+      return { success: false, balance: 0, availableBalance: 0, currency: 'TZS' };
     }
   }
 

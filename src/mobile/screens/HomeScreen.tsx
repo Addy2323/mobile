@@ -22,7 +22,7 @@ import { LumoMemberCard } from '@/components/LumoMemberCard';
 import { DepositModal } from '@/components/DepositModal';
 import { WithdrawModal } from '@/components/WithdrawModal';
 import { VipTierShowcase } from '@/components/VipTierShowcase';
-import { fetchUserCardBalance } from '@/lib/ledgerApi';
+import { fetchUserCardBalance, authFetch } from '@/lib/ledgerApi';
 import { getOwnerId } from '@/lib/ownerId';
 
 export interface HomeScreenProps {
@@ -67,14 +67,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   async function fetchActivities() {
     try {
       const ownerId = getOwnerId();
-      // 1. Fetch user activities from server endpoint
-      const res = await fetch(`/api/user/activities?user_id=${encodeURIComponent(ownerId)}`);
+      // 1. Fetch user activities from authenticated server endpoint
+      const res = await authFetch('/api/me/activities');
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.receivedPayments)) {
           setReceivedPayments(json.receivedPayments);
         }
-        if (Array.isArray(json.splits) && json.splits.length > 0) {
+        if (Array.isArray(json.splits)) {
           setSplits(json.splits);
           setLoading(false);
           setRefreshing(false);
@@ -82,18 +82,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }
       }
 
-      // 2. Direct Supabase query fallback for splits
+      // 2. Direct Supabase query fallback strictly isolated to this user's ownerId
       const { data, error } = await supabase
         .from('splits')
         .select('*, merchant:merchants(*)')
+        .eq('owner_user_id', ownerId)
         .order('created_at', { ascending: false })
         .limit(6);
 
       if (!error && data) {
         setSplits(data as (Split & { merchant?: Merchant | null })[]);
+      } else {
+        setSplits([]);
       }
     } catch (err) {
       console.error('Error fetching activities:', err);
+      setSplits([]);
     } finally {
       setLoading(false);
       setRefreshing(false);

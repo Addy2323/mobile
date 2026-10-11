@@ -4,7 +4,9 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { smsService, normalizeTzPhone } from './smsService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+import { getUserJwtSecret } from './userAuth.js';
+
+const JWT_SECRET = getUserJwtSecret();
 const PASSWORD_SALT = process.env.PASSWORD_SALT || 'lumo_split_secure_salt_dev';
 
 /**

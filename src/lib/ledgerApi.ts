@@ -45,30 +45,81 @@ export type WithdrawalRequest = {
   created_at: string;
 };
 
+export type UserSummary = {
+  balance: {
+    available: number;
+    pending: number;
+    reserved: number;
+    tier: string;
+    accountRef: string;
+    qualifyingTxCount: number;
+  };
+  stats: {
+    splitsCount: number;
+    totalVolume: number;
+    totalCollected: number;
+  };
+  recentTransactions: any[];
+  recentSplits: any[];
+};
+
 export async function fetchUserCardBalance(): Promise<UserCardBalance> {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/card-balance?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/me/balance`);
   if (!res.ok) {
-    throw new Error('Could not fetch card balance');
+    // Graceful fallback to legacy /api/user/card-balance if needed
+    const fallbackRes = await authFetch(`${API_BASE}/user/card-balance`);
+    if (!fallbackRes.ok) throw new Error('Could not fetch card balance');
+    return fallbackRes.json();
   }
   return res.json();
 }
 
 export async function fetchLedgerTransactions(): Promise<LedgerTransaction[]> {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/ledger-transactions?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/me/transactions`);
   if (!res.ok) {
-    throw new Error('Could not fetch ledger history');
+    const fallbackRes = await authFetch(`${API_BASE}/user/ledger-transactions`);
+    if (!fallbackRes.ok) throw new Error('Could not fetch ledger history');
+    return fallbackRes.json();
   }
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.transactions || []);
+}
+
+export async function fetchUserSummary(): Promise<UserSummary> {
+  const res = await authFetch(`${API_BASE}/me/summary`);
+  if (!res.ok) throw new Error('Could not fetch user dashboard summary');
   return res.json();
 }
 
+export async function fetchUserSplits(): Promise<any[]> {
+  const res = await authFetch(`${API_BASE}/me/splits`);
+  if (!res.ok) {
+    const ownerId = getOwnerId();
+    const fallbackRes = await authFetch(`${API_BASE}/splits?owner_user_id=${encodeURIComponent(ownerId)}`);
+    if (!fallbackRes.ok) return [];
+    return fallbackRes.json();
+  }
+  const data = await res.json();
+  return data.splits || [];
+}
+
+export async function fetchUserActivities(): Promise<any[]> {
+  const res = await authFetch(`${API_BASE}/me/activities`);
+  if (!res.ok) {
+    const fallbackRes = await authFetch(`${API_BASE}/user/activities`);
+    if (!fallbackRes.ok) return [];
+    const fb = await fallbackRes.json();
+    return fb.splits || [];
+  }
+  const data = await res.json();
+  return data.activities || [];
+}
+
 export async function initiateDeposit(amount: number, phone: string, provider: string = 'M-Pesa') {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/deposits/initiate`, {
+  const res = await authFetch(`${API_BASE}/me/deposits/initiate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, amount, phone, provider })
+    body: JSON.stringify({ amount, phone, provider })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Deposit failed');
@@ -85,24 +136,21 @@ export type DepositStatusResult = {
 };
 
 export async function checkDepositStatus(depositRef?: string, providerTxRef?: string, amount?: number): Promise<DepositStatusResult> {
-  const userId = getOwnerId();
   const params = new URLSearchParams();
-  params.set('user_id', userId);
   if (depositRef) params.set('deposit_ref', depositRef);
   if (providerTxRef) params.set('provider_tx_ref', providerTxRef);
   if (amount) params.set('amount', amount.toString());
 
-  const res = await authFetch(`${API_BASE}/user/deposits/status?${params.toString()}`);
+  const res = await authFetch(`${API_BASE}/me/deposits/status?${params.toString()}`);
   if (!res.ok) throw new Error('Could not verify deposit status');
   return res.json();
 }
 
 export async function requestWithdrawal(amount: number, destinationType: 'MOBILE_MONEY' | 'BANK', destinationDetails: any) {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/withdrawals/request`, {
+  const res = await authFetch(`${API_BASE}/me/withdrawals/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, amount, destination_type: destinationType, destination_details: destinationDetails })
+    body: JSON.stringify({ amount, destinationType, destinationDetails })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Withdrawal request failed');
@@ -110,25 +158,24 @@ export async function requestWithdrawal(amount: number, destinationType: 'MOBILE
 }
 
 export async function fetchUserWithdrawals(): Promise<WithdrawalRequest[]> {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/withdrawals?user_id=${encodeURIComponent(userId)}`);
+  const res = await authFetch(`${API_BASE}/me/withdrawals`);
   if (!res.ok) throw new Error('Could not fetch withdrawal requests');
-  return res.json();
+  const data = await res.json();
+  return data.withdrawals || [];
 }
 
 export async function executeBillPayment(provider: string, meterNumber: string, amount: number) {
-  const userId = getOwnerId();
-  const res = await authFetch(`${API_BASE}/user/bill-payments`, {
+  const res = await authFetch(`${API_BASE}/me/bill-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, provider, account_meter_number: meterNumber, amount })
+    body: JSON.stringify({ provider, accountMeterNumber: meterNumber, amount })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Bill payment failed');
   return data;
 }
 
-function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const token = localStorage.getItem('lumo_user_token');
   const headers = new Headers(init.headers || {});
   if (token) headers.set('Authorization', 'Bearer ' + token);

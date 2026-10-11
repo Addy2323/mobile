@@ -6,6 +6,7 @@ import {
 import { supabase, type Split, type PaymentAttempt } from '@/lib/supabase';
 import { formatMoney, formatDateTime, timeAgo } from '@/lib/utils';
 import StatusBadge from '@/components/StatusBadge';
+import { fetchUserSplits, fetchLedgerTransactions } from '@/lib/ledgerApi';
 
 type FilterType = 'ALL' | 'OPEN' | 'SETTLED' | 'EXPIRED' | 'CASH';
 
@@ -29,11 +30,18 @@ export default function ActivityView({ onSelectSplit, onBack }: ActivityViewProp
 
   async function loadData() {
     setLoading(true);
-    const { data: splitsData } = await supabase.from('splits').select('*').order('created_at', { ascending: false });
-    const { data: paymentsData } = await supabase.from('payment_attempts').select('*').order('requested_at', { ascending: false });
-    if (splitsData) setSplits(splitsData as Split[]);
-    if (paymentsData) setPayments(paymentsData as PaymentAttempt[]);
-    setLoading(false);
+    try {
+      const [splitsRes, txsRes] = await Promise.allSettled([
+        fetchUserSplits(),
+        fetchLedgerTransactions(),
+      ]);
+      if (splitsRes.status === 'fulfilled') setSplits(splitsRes.value as Split[] || []);
+      if (txsRes.status === 'fulfilled') setPayments(txsRes.value as any || []);
+    } catch (err) {
+      console.error('Error loading activity:', err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function showToast(msg: string) {
