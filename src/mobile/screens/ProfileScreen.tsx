@@ -17,8 +17,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenNotifications,
   onSignOut,
 }) => {
-  const userName = localStorage.getItem('lumo_user_name') || 'Given Mhema';
-  const userPhone = localStorage.getItem('lumo_user_phone') || '0754 123 456';
+  const sanitizeName = (val: string | null) => {
+    if (!val || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) || val.startsWith('user_')) {
+      return 'Given Mhema';
+    }
+    return val;
+  };
+
+  const sanitizePhone = (val: string | null) => {
+    if (!val || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+      return '0754 123 456';
+    }
+    return val;
+  };
+
+  const [userName, setUserName] = useState(() => sanitizeName(localStorage.getItem('lumo_user_name')));
+  const [userPhone, setUserPhone] = useState(() => sanitizePhone(localStorage.getItem('lumo_user_phone')));
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(userName);
+  const [editPhone, setEditPhone] = useState(userPhone);
+
   const [showPwaPrompt, setShowPwaPrompt] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallGuideModal, setShowInstallGuideModal] = useState(false);
@@ -31,6 +49,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanN = editName.trim() || 'Given Mhema';
+    const cleanP = editPhone.trim() || '0754 123 456';
+    setUserName(cleanN);
+    setUserPhone(cleanP);
+    localStorage.setItem('lumo_user_name', cleanN);
+    localStorage.setItem('lumo_user_phone', cleanP);
+    window.dispatchEvent(new Event('lumo_user_profile_updated'));
+    setShowEditModal(false);
+  };
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -50,21 +80,93 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   return (
     <div className="p-4 space-y-6 no-tap-highlight">
       {/* User Header */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center space-x-4">
-        <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-2xl flex items-center justify-center text-white font-extrabold text-2xl shadow-lg shadow-indigo-600/30">
-          {userName.slice(0, 2).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-slate-900 truncate">{userName}</h2>
-          <p className="text-xs font-semibold text-slate-500 flex items-center mt-0.5">
-            <Phone className="w-3.5 h-3.5 mr-1 text-slate-400" />
-            <span>+255 {userPhone}</span>
-          </p>
-          <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-2">
-            Verified User
+      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div className="flex items-center space-x-4 min-w-0">
+          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-2xl flex items-center justify-center text-white font-extrabold text-2xl shadow-lg shadow-indigo-600/30 flex-shrink-0">
+            {userName.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold text-slate-900 truncate">{userName}</h2>
+            <p className="text-xs font-semibold text-slate-500 flex items-center mt-0.5 truncate">
+              <Phone className="w-3.5 h-3.5 mr-1 text-slate-400 flex-shrink-0" />
+              <span>+255 {userPhone.replace(/^\+255\s*/, '')}</span>
+            </p>
+            <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-2">
+              Verified Member
+            </div>
           </div>
         </div>
+
+        <button
+          onClick={() => {
+            setEditName(userName);
+            setEditPhone(userPhone);
+            setShowEditModal(true);
+          }}
+          className="p-2.5 bg-slate-50 hover:bg-slate-100 text-indigo-600 rounded-2xl border border-slate-200 text-xs font-bold transition-colors ml-2"
+          title="Edit Profile"
+        >
+          Edit
+        </button>
       </div>
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-900 text-base">Edit Cardholder Profile</h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 mb-1 block">Full Name (shown on Card)</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. Given Mhema"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-600"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 mb-1 block">Phone Number</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="0754 123 456"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xs transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Language Choice */}
       <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">

@@ -50,6 +50,36 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  const getCleanName = () => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('lumo_user_name') : null;
+    const isBad = !raw || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) || raw.startsWith('user_');
+    return isBad ? 'Given Mhema' : raw;
+  };
+
+  const getCleanPhone = () => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('lumo_user_phone') : null;
+    const isBad = !raw || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+    if (isBad) return '+255 754 123 456';
+    if (raw.startsWith('+')) return raw;
+    return `+255 ${raw.replace(/^0/, '')}`;
+  };
+
+  const [cardholderName, setCardholderName] = useState(getCleanName);
+  const [cardholderPhone, setCardholderPhone] = useState(getCleanPhone);
+
+  useEffect(() => {
+    const syncProfile = () => {
+      setCardholderName(getCleanName());
+      setCardholderPhone(getCleanPhone());
+    };
+    window.addEventListener('lumo_user_profile_updated', syncProfile);
+    window.addEventListener('storage', syncProfile);
+    return () => {
+      window.removeEventListener('lumo_user_profile_updated', syncProfile);
+      window.removeEventListener('storage', syncProfile);
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const loadData = async () => {
@@ -197,11 +227,11 @@ export const LumoMemberCard: React.FC<LumoMemberCardProps> = ({
         <div className="relative z-10 flex items-end justify-between pt-1">
           {/* Cardholder Name & Phone */}
           <div>
-            <div className="text-xs sm:text-sm font-bold text-white tracking-wide">
-              {balanceData?.userId ? balanceData.userId.replace('user_', 'User ').replace('_101', '') : 'Ado Myamba'}
+            <div className="text-xs sm:text-sm font-bold text-white tracking-wide uppercase">
+              {cardholderName}
             </div>
             <div className="text-[10px] sm:text-xs text-slate-400 font-mono tracking-wider">
-              +255 7XX XXX XXX
+              {cardholderPhone}
             </div>
           </div>
 
