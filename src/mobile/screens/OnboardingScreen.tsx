@@ -169,6 +169,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const handleVerifyOtp = async (codeToVerify?: string) => {
     const code = (codeToVerify || otpString).trim();
     if (code.length !== 6) return;
+    setOtpString(code);
 
     setBusy(true);
     setError('');
@@ -209,7 +210,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         body: JSON.stringify({
           name: name.trim() || 'LUMO User',
           phone: phone.trim(),
-          passcode: finalPin
+          passcode: finalPin,
+          otpCode: otpString.trim()
         })
       });
 

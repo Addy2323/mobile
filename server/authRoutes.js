@@ -34,11 +34,12 @@ export function createAuthRouter(pool) {
       );
 
       if (rows.length === 0) {
-        return res.json({ registered: false });
+        return res.json({ registered: false, exists: false });
       }
 
       res.json({
         registered: true,
+        exists: true,
         name: rows[0].name,
         status: rows[0].status
       });
@@ -164,14 +165,27 @@ export function createAuthRouter(pool) {
       }
 
       // Check OTP verification
-      const otpCheck = await pool.query(
-        `SELECT id FROM otp_verifications
-         WHERE phone = $1 AND code = $2 AND purpose = 'REGISTER' AND is_verified = true
-         ORDER BY created_at DESC LIMIT 1`,
-        [normPhone, String(otpCode).trim()]
-      );
+      let otpCheck = null;
+      if (otpCode) {
+        otpCheck = await pool.query(
+          `SELECT id FROM otp_verifications
+           WHERE phone = $1 AND code = $2 AND purpose = 'REGISTER' AND is_verified = true
+           ORDER BY created_at DESC LIMIT 1`,
+          [normPhone, String(otpCode).trim()]
+        );
+      }
 
-      if (otpCheck.rows.length === 0) {
+      if (!otpCheck || otpCheck.rows.length === 0) {
+        otpCheck = await pool.query(
+          `SELECT id FROM otp_verifications
+           WHERE phone = $1 AND purpose = 'REGISTER' AND is_verified = true
+             AND (created_at > NOW() - INTERVAL '30 minutes' OR expires_at > NOW() - INTERVAL '10 minutes')
+           ORDER BY created_at DESC LIMIT 1`,
+          [normPhone]
+        );
+      }
+
+      if (!otpCheck || otpCheck.rows.length === 0) {
         return res.status(400).json({ error: 'Phone number verification required before registration' });
       }
 

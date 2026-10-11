@@ -182,7 +182,7 @@ export default function LoginView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Check phone failed');
 
-      if (data.exists) {
+      if (data.exists || data.registered) {
         // User already has an account -> Direct immediately to Passcode section!
         setLoginPhone(cleanPhone);
         if (data.name) setLoginUserName(data.name);

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Home, Users, FileText, Link as LinkIcon, RotateCcw, CreditCard, Settings,
-  Bell, ChevronDown, Check, LogOut,
+  Bell, ChevronDown, Check, LogOut, Smartphone, Download
 } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 
-export type View = 'home' | 'create' | 'merchant' | 'admin' | 'detail' | 'payment' | 'send' | 'deposit' | 'transfer' | 'control' | 'activity' | 'settings';
+export type View = 'home' | 'create' | 'merchant' | 'admin' | 'detail' | 'payment' | 'send' | 'deposit' | 'transfer' | 'control' | 'activity' | 'settings' | 'download';
 
 type HeaderProps = {
   view: View;
@@ -42,6 +42,7 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
     { id: 'activity' as View, label: 'Transactions', icon: RotateCcw, action: () => onNavigate('activity') },
     { id: 'settings' as View, label: 'Card', icon: CreditCard, action: () => onNavigate('settings') },
     { id: 'settings' as View, label: 'Settings', icon: Settings, action: () => onNavigate('settings') },
+    { id: 'download' as View, label: 'Install App', icon: Download, action: () => onNavigate('download') },
   ];
 
   const isCurrentActive = (itemLabel: string) => {
@@ -52,6 +53,7 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
     if (itemLabel === 'Transactions') return view === 'activity';
     if (itemLabel === 'Card') return false;
     if (itemLabel === 'Settings') return view === 'settings';
+    if (itemLabel === 'Install App') return view === 'download';
     return false;
   };
 
@@ -124,6 +126,16 @@ export default function Header({ view, onNavigate, onCreate }: HeaderProps) {
                 >
                   <Settings className="w-4 h-4 text-slate-400" />
                   <span>Account Settings</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    onNavigate('download');
+                  }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-800/60 text-slate-200 flex items-center space-x-2"
+                >
+                  <Smartphone className="w-4 h-4 text-[#00E599]" />
+                  <span>Install / Download App</span>
                 </button>
                 <button
                   onClick={() => {

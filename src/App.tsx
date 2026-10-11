@@ -19,6 +19,7 @@ import ControlNumberView from '@/views/ControlNumberView';
 import { LayoutSwitch } from '@/mobile/components/LayoutSwitch';
 import { MobileShell } from '@/mobile/components/MobileShell';
 import { AdminApp } from '@/admin/AdminApp';
+import { DownloadView } from '@/views/DownloadView';
 
 function getPublicToken(): string | null {
   const match = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]+)/);
@@ -29,7 +30,15 @@ function isAdminRoute(): boolean {
   return window.location.pathname.startsWith('/admin');
 }
 
+function isDownloadRoute(): boolean {
+  return window.location.pathname === '/download' || window.location.pathname === '/split/download';
+}
+
 export default function App() {
+  if (isDownloadRoute()) {
+    return <DownloadView onBack={() => { window.location.href = '/'; }} />;
+  }
+
   if (isAdminRoute()) {
     return <AdminApp />;
   }
@@ -212,6 +221,8 @@ export default function App() {
           {view === 'merchant' && <MerchantView />}
 
           {view === 'admin' && <AdminView />}
+
+          {view === 'download' && <DownloadView onBack={() => setView('home')} />}
 
           {(['send', 'deposit', 'transfer'] as const).includes(view as any) && (
             <MoneyFlowView mode={view as MoneyFlowMode} onBack={() => setView('home')} />
