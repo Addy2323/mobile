@@ -191,49 +191,83 @@ export class SnippePaymentProvider {
     recipientBank,
     recipientAccount,
     recipientName,
+    narration,
+    metadata = {},
     idempotencyKey,
     webhookUrl
   }) {
-    const numericAmount = Math.round(amount);
+    const numericAmount = Math.round(Number(amount));
 
-    if (numericAmount < 5000) {
-      console.warn(`[SnippeProvider] Payout amount TZS ${numericAmount} below Snippe minimum of TZS 5,000.`);
+    if (!numericAmount || numericAmount <= 0) {
+      console.warn(`[SnippeProvider] Payout amount TZS ${numericAmount} is invalid.`);
       return {
         status: 'FAILED',
-        failureCode: 'MINIMUM_PAYOUT_LIMIT',
-        failureReason: 'Payout amount must be at least TZS 5,000 for Snippe disbursement.',
+        failureCode: 'INVALID_AMOUNT',
+        failureReason: 'Payout amount must be greater than 0 TZS.',
         payoutId: null
       };
     }
 
-    let cleanPhone = (recipientPhone || '').replace(/[^\d]/g, '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.slice(1);
-    if (!cleanPhone.startsWith('255') && cleanPhone.length === 9) cleanPhone = '255' + cleanPhone;
+    if (numericAmount < 5000) {
+      console.warn(`[SnippeProvider] Payout amount TZS ${numericAmount} is below minimum payout threshold (TZS 5,000).`);
+      return {
+        status: 'FAILED',
+        failureCode: 'MINIMUM_PAYOUT_LIMIT',
+        failureReason: 'Minimum payout amount is 5,000 TZS. Please increase withdrawal amount.',
+        payoutId: null
+      };
+    }
 
-    const resolvedWebhookUrl = (webhookUrl || process.env.SNIPPE_WEBHOOK_URL || 'https://lumo.co.tz/api/webhooks/snippe').trim();
-    const isBank = channel === 'bank';
-    const payload = isBank
-      ? {
-          amount: numericAmount,
-          channel: 'bank',
-          recipient_bank: recipientBank || bankCode || 'CRDB',
-          recipient_account: recipientAccount,
-          recipient_name: recipientName || 'LUMO Split Beneficiary',
-          narration: `LUMO Split ${splitId || ''} Settlement`.slice(0, 64),
-          webhook_url: resolvedWebhookUrl,
-          metadata: { split_id: splitId }
-        }
-      : {
-          amount: numericAmount,
-          channel: 'mobile',
-          recipient_phone: cleanPhone,
-          recipient_name: recipientName || 'LUMO Split Beneficiary',
-          narration: `LUMO Split ${splitId || ''} Settlement`.slice(0, 64),
-          webhook_url: resolvedWebhookUrl,
-          metadata: { split_id: splitId }
+    const isBank = String(channel).toLowerCase() === 'bank';
+    const resolvedWebhookUrl = (webhookUrl || process.env.SNIPPE_WEBHOOK_URL || 'https://lumosplit.lumo.co.tz/api/webhooks/snippe').trim();
+    const cleanName = (recipientName || 'LUMO Customer').trim() || 'LUMO Customer';
+    const cleanNarration = (narration || `LUMO Settlement ${splitId || ''}`).trim().slice(0, 64);
+
+    let payload;
+    if (isBank) {
+      payload = {
+        amount: numericAmount,
+        channel: 'bank',
+        recipient_bank: recipientBank || bankCode || 'CRDB',
+        recipient_account: recipientAccount,
+        recipient_name: cleanName,
+        narration: cleanNarration,
+        webhook_url: resolvedWebhookUrl,
+        metadata: { split_id: splitId, ...metadata }
+      };
+    } else {
+      let cleanPhone = (recipientPhone || '').replace(/[^\d]/g, '');
+      if (cleanPhone.startsWith('0')) {
+        cleanPhone = '255' + cleanPhone.slice(1);
+      } else if (cleanPhone.startsWith('2550')) {
+        cleanPhone = '255' + cleanPhone.slice(4);
+      } else if (!cleanPhone.startsWith('255') && cleanPhone.length === 9) {
+        cleanPhone = '255' + cleanPhone;
+      }
+
+      if (cleanPhone.length !== 12 || !cleanPhone.startsWith('255')) {
+        console.warn(`[SnippeProvider] Payout recipient phone ${recipientPhone} is invalid.`);
+        return {
+          status: 'FAILED',
+          failureCode: 'INVALID_PHONE_FORMAT',
+          failureReason: `Recipient phone number '${recipientPhone}' is invalid. Must be in Tanzanian 255XXXXXXXXX format.`,
+          payoutId: null
         };
+      }
+
+      payload = {
+        amount: numericAmount,
+        channel: 'mobile',
+        recipient_phone: cleanPhone,
+        recipient_name: cleanName,
+        narration: cleanNarration,
+        webhook_url: resolvedWebhookUrl,
+        metadata: { split_id: splitId, ...metadata }
+      };
+    }
 
     const validIdempotencyKey = this.formatIdempotencyKey(idempotencyKey || `payout_${splitId || Date.now()}`, 'payout');
+    console.log(`[SnippeProvider] Disagreeing/Sending Payout to Snippe (/v1/payouts/send):`, JSON.stringify(payload, null, 2));
 
     try {
       const response = await fetch(`${SNIPPE_BASE_URL}/v1/payouts/send`, {
@@ -251,29 +285,42 @@ export class SnippePaymentProvider {
         console.warn(`[SnippeProvider] Payout API error (${response.status}):`, errorText);
         let parsedErr = {};
         try { parsedErr = JSON.parse(errorText); } catch {}
+        const errorMessage = parsedErr.message || parsedErr.error || `Snippe error ${response.status}: ${errorText}`;
         return {
           status: 'FAILED',
+          failureCode: parsedErr.error_code || 'PAYOUT_REJECTED',
+          failureReason: errorMessage,
           payoutId: null,
-          message: parsedErr.message || 'Settlement payout request failed.'
+          rawError: parsedErr
         };
       }
 
       const body = await response.json();
       const pData = body.data || body;
       const rawStatus = (pData.status || 'pending').toLowerCase();
+      const payoutReference = pData.reference || pData.external_reference || pData.id;
 
       return {
-        status: rawStatus === 'completed' ? 'SETTLED' : rawStatus === 'failed' ? 'FAILED' : 'PROCESSING',
-        payoutId: pData.reference || pData.id || `PAYOUT-SNP-${Date.now().toString().slice(-8)}`,
+        status: ['completed', 'settled', 'success'].includes(rawStatus)
+          ? 'SETTLED'
+          : ['failed', 'rejected', 'error'].includes(rawStatus)
+          ? 'FAILED'
+          : 'PROCESSING',
+        payoutId: payoutReference,
+        externalReference: pData.external_reference,
+        providerDetected: pData.channel?.provider,
+        fees: pData.fees?.value,
+        total: pData.total?.value,
         data: pData,
-        message: 'Settlement payout request dispatched to Snippe.'
+        message: body.message || 'Mobile money payout dispatched via Snippe.'
       };
     } catch (err) {
       console.error('[SnippeProvider] Payout dispatch error:', err.message);
       return {
         status: 'FAILED',
-        payoutId: null,
-        message: 'Settlement payout request network error.'
+        failureCode: 'NETWORK_ERROR',
+        failureReason: `Network connection to Snippe disbursement API failed: ${err.message}`,
+        payoutId: null
       };
     }
   }

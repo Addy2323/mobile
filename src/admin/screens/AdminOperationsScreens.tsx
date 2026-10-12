@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, RotateCcw, AlertOctagon, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { RefreshCw, RotateCcw, AlertOctagon, CheckCircle2, ShieldAlert, Send } from 'lucide-react';
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
 
 interface OpsProps {
   token: string;
@@ -548,10 +550,7 @@ export const AdminDestinationsScreen: React.FC<OpsProps> = ({ token }) => {
 export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('PENDING_REVIEW');
-  const [modalItem, setModalItem] = useState<{ withdrawal: any; action: 'APPROVE' | 'REJECT' } | null>(null);
-  const [actionReason, setActionReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   const fetchWithdrawals = async () => {
     setLoading(true);
@@ -565,34 +564,291 @@ export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
 
   useEffect(() => { fetchWithdrawals(); }, [token, statusFilter]);
 
-  const executeAction = async () => {
-    if (!modalItem) return;
-    const { withdrawal, action } = modalItem;
-
-    if (action === 'REJECT' && !actionReason.trim()) {
-      alert('Please provide a mandatory reason for rejection.');
-      return;
+  const handleApprove = async (w: any) => {
+    let dest = w.destination_details || {};
+    if (typeof dest === 'string') {
+      try { dest = JSON.parse(dest); } catch {}
     }
+    const phone = dest.phone || dest.phoneNumber || dest.phone_number || dest.account_number || w.user_phone || 'N/A';
+    const gross = Number(w.amount || 0);
+    const fee = Number(w.fee || 0);
+    const net = Number(w.net_amount || (gross - fee));
+    const finalPayout = net > 0 ? net : gross;
+
+    const result = await Swal.fire({
+      title: 'Approve & Disburse Payout?',
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #cbd5e1;">
+          <div style="background: #020617; padding: 12px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 12px; font-family: monospace;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Ref Code:</span>
+              <strong style="color: #f59e0b;">${w.reference_code}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Recipient:</span>
+              <strong style="color: #ffffff;">${w.user_name || 'Member'}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Mobile Phone:</span>
+              <strong style="color: #10b981;">${phone}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Channel:</span>
+              <span style="color: #38bdf8;">${w.destination_type || 'MOBILE_MONEY'}</span>
+            </div>
+            <hr style="border-color: #334155; margin: 8px 0;" />
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Gross Amount:</span>
+              <strong>TZS ${gross.toLocaleString()}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Platform Fee:</span>
+              <span style="color: #f43f5e;">TZS ${fee.toLocaleString()}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #334155;">
+              <span style="color: #cbd5e1; font-weight: bold;">Net Disbursement:</span>
+              <strong style="color: #10b981;">TZS ${finalPayout.toLocaleString()}</strong>
+            </div>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+            Completing this action finalizes the user ledger debit and dispatches mobile money payout to <strong>${phone}</strong> via Snippe API.
+          </p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '⚡ Confirm & Disburse Payout',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#475569',
+      background: '#0f172a',
+      color: '#ffffff',
+      customClass: {
+        popup: 'border border-slate-800 rounded-2xl shadow-2xl'
+      }
+    });
+
+    if (!result.isConfirmed) return;
+
+    Swal.fire({
+      title: 'Disbursing Mobile Money...',
+      html: `<div style="font-size: 13px; color: #94a3b8;">Sending TZS ${finalPayout.toLocaleString()} to <strong>${phone}</strong> via Snippe.sh Gateway...</div>`,
+      allowOutsideClick: false,
+      background: '#0f172a',
+      color: '#ffffff',
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
 
     try {
-      setSubmitting(true);
-      const res = await fetch(`/api/admin/withdrawals/${withdrawal.id}/action`, {
+      const res = await fetch(`/api/admin/withdrawals/${w.id}/action`, {
         method: 'POST',
         headers: { ...getHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason: actionReason })
+        body: JSON.stringify({ action: 'APPROVE', reason: 'Approved by Administrator' })
       });
 
-      if (res.ok) {
-        alert(`Withdrawal request ${action}D successfully!`);
-        setModalItem(null);
-        setActionReason('');
-        fetchWithdrawals();
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Disbursement Dispatched!',
+          html: `
+            <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+              <p style="color: #34d399; font-weight: bold; margin-bottom: 8px;">✓ Payout successfully sent to recipient's mobile wallet!</p>
+              <div><strong>Recipient Phone:</strong> <span style="color: #10b981; font-family: monospace;">${phone}</span></div>
+              <div><strong>Amount Disbursed:</strong> TZS ${finalPayout.toLocaleString()}</div>
+              <div><strong>Snippe Payout Ref:</strong> <span style="color: #f59e0b; font-family: monospace;">${data.payoutId || 'Pending'}</span></div>
+              <div><strong>Status:</strong> <span style="color: #38bdf8; font-weight: bold;">${data.status || 'PROCESSING'}</span></div>
+            </div>
+          `,
+          confirmButtonColor: '#059669',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
       } else {
-        const err = await res.json();
-        alert(err.error || 'Action failed');
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Disbursement Notice',
+          html: `
+            <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+              <p style="color: #fbbf24; font-weight: bold; margin-bottom: 8px;">The ledger debit was approved, but the mobile money gateway returned a notice:</p>
+              <div style="background: #1e1b4b; padding: 10px; border-radius: 8px; border: 1px solid #4338ca; color: #e0e7ff; font-family: monospace; font-size: 12px; margin-bottom: 8px; word-break: break-word;">
+                ${data.message || data.error || 'Gateway returned an error'}
+              </div>
+              <p style="color: #94a3b8; font-size: 11px;">You can retry the disbursement anytime by clicking the "Disburse" button.</p>
+            </div>
+          `,
+          confirmButtonColor: '#d97706',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
       }
-    } finally {
-      setSubmitting(false);
+      fetchWithdrawals();
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Communication Error',
+        text: err.message || 'Could not connect to admin server.',
+        confirmButtonColor: '#e11d48',
+        background: '#0f172a',
+        color: '#ffffff'
+      });
+    }
+  };
+
+  const handleReject = async (w: any) => {
+    const { value: reason } = await Swal.fire({
+      title: 'Reject Withdrawal Request',
+      text: `State reason for rejecting ${w.reference_code}. Reserved funds (TZS ${Number(w.amount).toLocaleString()}) will be immediately refunded to user's available balance:`,
+      input: 'textarea',
+      inputPlaceholder: 'Enter mandatory reason for audit trail...',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Confirm Rejection & Refund',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#475569',
+      background: '#0f172a',
+      color: '#ffffff',
+      inputValidator: (value) => {
+        if (!value || !value.trim()) {
+          return 'Rejection reason is mandatory!';
+        }
+      }
+    });
+
+    if (!reason) return;
+
+    Swal.fire({
+      title: 'Refunding Funds...',
+      allowOutsideClick: false,
+      background: '#0f172a',
+      color: '#ffffff',
+      didOpen: () => Swal.showLoading()
+    });
+
+    try {
+      const res = await fetch(`/api/admin/withdrawals/${w.id}/action`, {
+        method: 'POST',
+        headers: { ...getHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'REJECT', reason })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Withdrawal Rejected',
+          text: `Funds (TZS ${Number(w.amount).toLocaleString()}) successfully refunded to user available balance.`,
+          confirmButtonColor: '#059669',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Rejection Failed',
+          text: data.error || 'Failed to reject withdrawal',
+          confirmButtonColor: '#e11d48',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
+      }
+      fetchWithdrawals();
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Error',
+        text: err.message,
+        background: '#0f172a',
+        color: '#ffffff'
+      });
+    }
+  };
+
+  const handleRetryDisburse = async (w: any) => {
+    let dest = w.destination_details || {};
+    if (typeof dest === 'string') {
+      try { dest = JSON.parse(dest); } catch {}
+    }
+    const phone = dest.phone || dest.phoneNumber || dest.phone_number || dest.account_number || w.user_phone || 'N/A';
+    const payout = Number(w.net_amount) > 0 ? Number(w.net_amount) : Number(w.amount);
+
+    const confirm = await Swal.fire({
+      title: 'Disburse Payout via Snippe?',
+      html: `
+        <div style="text-align: left; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+          <div style="background: #020617; padding: 12px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 12px; font-family: monospace;">
+            <div><span style="color: #94a3b8;">Ref Code:</span> <strong style="color: #f59e0b;">${w.reference_code}</strong></div>
+            <div><span style="color: #94a3b8;">Recipient Phone:</span> <strong style="color: #10b981;">${phone}</strong></div>
+            <div><span style="color: #94a3b8;">Payout Amount:</span> <strong style="color: #ffffff;">TZS ${payout.toLocaleString()}</strong></div>
+            <div><span style="color: #94a3b8;">Current Status:</span> <span style="color: #38bdf8;">${w.status}</span></div>
+          </div>
+          <p style="margin: 0; color: #94a3b8; font-size: 12px;">Trigger live mobile money payout via Snippe Payouts API.</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '⚡ Send Payout Now',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#475569',
+      background: '#0f172a',
+      color: '#ffffff'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    Swal.fire({
+      title: 'Contacting Snippe Gateway...',
+      text: `Dispatching TZS ${payout.toLocaleString()} to ${phone}...`,
+      allowOutsideClick: false,
+      background: '#0f172a',
+      color: '#ffffff',
+      didOpen: () => Swal.showLoading()
+    });
+
+    try {
+      const res = await fetch(`/api/admin/withdrawals/${w.id}/disburse`, {
+        method: 'POST',
+        headers: getHeaders(token)
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Disbursement Dispatched!',
+          html: `
+            <div style="text-align: left; font-size: 13px; color: #cbd5e1;">
+              <p style="color: #34d399; font-weight: bold;">${data.message}</p>
+              <div style="margin-top: 8px; font-family: monospace; color: #f59e0b;">Snippe Ref: ${data.payoutId || 'Sent'}</div>
+            </div>
+          `,
+          confirmButtonColor: '#059669',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
+      } else {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Disbursement Notice',
+          text: data.message || data.error || 'Failed to dispatch payout',
+          confirmButtonColor: '#e11d48',
+          background: '#0f172a',
+          color: '#ffffff'
+        });
+      }
+      fetchWithdrawals();
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Error',
+        text: err.message,
+        background: '#0f172a',
+        color: '#ffffff'
+      });
     }
   };
 
@@ -601,7 +857,7 @@ export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-base font-extrabold text-white">Controlled Withdrawal Approvals & Ledger Payouts</h2>
         <div className="flex items-center space-x-2">
-          {['ALL', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'COMPLETED'].map((st) => (
+          {['ALL', 'PENDING_REVIEW', 'APPROVED', 'DISBURSEMENT_FAILED', 'REJECTED', 'COMPLETED'].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -636,144 +892,82 @@ export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
             ) : withdrawals.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-slate-500">No withdrawal requests found for this filter</td></tr>
             ) : (
-              withdrawals.map((w) => (
-                <tr key={w.id} className="hover:bg-slate-900/40">
-                  <td className="p-4 font-mono text-amber-400 font-bold">{w.reference_code}</td>
-                  <td className="p-4 text-slate-300 text-[11px]">
-                    <div className="font-semibold text-white">{w.user_name || 'Member'}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{w.user_phone || w.user_id}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-semibold text-white">{w.destination_type}</div>
-                    <div className="text-[11px] text-slate-400 font-mono">
-                      {w.destination_details?.phone || `${w.destination_details?.bank_name || 'Bank'} (${w.destination_details?.account_number || ''})`}
-                    </div>
-                  </td>
-                  <td className="p-4 font-mono font-bold text-white">TZS {Number(w.amount).toLocaleString()}</td>
-                  <td className="p-4 font-mono text-emerald-400 text-[11px]">
-                    Net: TZS {Number(w.net_amount || w.amount - (w.fee || 0)).toLocaleString()}
-                    <span className="block text-slate-500 text-[10px]">Fee: TZS {Number(w.fee || 0).toLocaleString()}</span>
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      w.status === 'COMPLETED' || w.status === 'APPROVED' ? 'bg-emerald-950 text-emerald-400' :
-                      w.status === 'PENDING_REVIEW' ? 'bg-amber-950 text-amber-400 border border-amber-800/60' : 'bg-rose-950 text-rose-400'
-                    }`}>
-                      {w.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right space-x-2">
-                    {w.status === 'PENDING_REVIEW' && (
-                      <>
+              withdrawals.map((w) => {
+                let dest = w.destination_details || {};
+                if (typeof dest === 'string') {
+                  try { dest = JSON.parse(dest); } catch {}
+                }
+                const phoneDisplay = dest?.phone || dest?.phoneNumber || dest?.phone_number || (dest?.bank_name ? `${dest.bank_name} (${dest.account_number || ''})` : w.user_phone || 'N/A');
+
+                return (
+                  <tr key={w.id} className="hover:bg-slate-900/40">
+                    <td className="p-4 font-mono text-amber-400 font-bold">{w.reference_code}</td>
+                    <td className="p-4 text-slate-300 text-[11px]">
+                      <div className="font-semibold text-white">{w.user_name || 'Member'}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{w.user_phone || w.user_id}</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="font-semibold text-white">{w.destination_type}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {phoneDisplay}
+                      </div>
+                    </td>
+                    <td className="p-4 font-mono font-bold text-white">TZS {Number(w.amount).toLocaleString()}</td>
+                    <td className="p-4 font-mono text-emerald-400 text-[11px]">
+                      Net: TZS {Number(w.net_amount || w.amount - (w.fee || 0)).toLocaleString()}
+                      <span className="block text-slate-500 text-[10px]">Fee: TZS {Number(w.fee || 0).toLocaleString()}</span>
+                    </td>
+                    <td className="p-4">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        w.status === 'COMPLETED' ? 'bg-emerald-950 text-emerald-400' :
+                        w.status === 'APPROVED' ? 'bg-indigo-950 text-indigo-400 border border-indigo-800/60' :
+                        w.status === 'PENDING_REVIEW' ? 'bg-amber-950 text-amber-400 border border-amber-800/60' :
+                        w.status === 'DISBURSEMENT_FAILED' ? 'bg-rose-950 text-rose-300 border border-rose-800/60' :
+                        'bg-rose-950 text-rose-400'
+                      }`} title={w.rejection_reason || ''}>
+                        {w.status}
+                      </span>
+                      {w.provider_tx_ref && (
+                        <div className="text-[9px] text-slate-400 font-mono mt-0.5" title={w.provider_tx_ref}>
+                          Ref: {w.provider_tx_ref.slice(0, 12)}...
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-right space-x-2">
+                      {w.status === 'PENDING_REVIEW' && (
+                        <>
+                          <button
+                            onClick={() => handleApprove(w)}
+                            className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 rounded-lg text-[10px] font-bold"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleReject(w)}
+                            className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-[10px] font-bold"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {(w.status === 'APPROVED' || w.status === 'DISBURSEMENT_FAILED' || (w.status === 'PROCESSING' && !w.provider_tx_ref)) && (
                         <button
-                          onClick={() => {
-                            setActionReason('');
-                            setModalItem({ withdrawal: w, action: 'APPROVE' });
-                          }}
-                          className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 rounded-lg text-[10px] font-bold"
+                          onClick={() => handleRetryDisburse(w)}
+                          className="px-2.5 py-1 bg-amber-950 hover:bg-amber-900 border border-amber-800 text-amber-300 rounded-lg text-[10px] font-bold inline-flex items-center gap-1"
+                          title="Trigger/Retry live mobile money payout"
                         >
-                          Approve
+                          <Send className="w-3 h-3" />
+                          <span>Disburse</span>
                         </button>
-                        <button
-                          onClick={() => {
-                            setActionReason('');
-                            setModalItem({ withdrawal: w, action: 'REJECT' });
-                          }}
-                          className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-[10px] font-bold"
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
-
-      {modalItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-extrabold text-white">
-              {modalItem.action === 'APPROVE' ? 'Confirm Withdrawal Approval' : 'Reject Withdrawal Request'}
-            </h3>
-
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Reference:</span>
-                <span className="text-amber-400 font-bold">{modalItem.withdrawal.reference_code}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Recipient:</span>
-                <span className="text-white">{modalItem.withdrawal.user_name || 'Member'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Gross Amount:</span>
-                <span className="text-white font-bold">TZS {Number(modalItem.withdrawal.amount).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Platform Fee:</span>
-                <span className="text-rose-400">TZS {Number(modalItem.withdrawal.fee || 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-800 pt-2 font-bold">
-                <span className="text-slate-300">Net Disbursement:</span>
-                <span className="text-emerald-400">TZS {Number(modalItem.withdrawal.net_amount).toLocaleString()}</span>
-              </div>
-            </div>
-
-            {modalItem.action === 'REJECT' ? (
-              <div>
-                <label className="block text-xs font-bold text-rose-400 mb-1">
-                  Rejection Reason (Required - Reserved funds will be refunded):
-                </label>
-                <textarea
-                  rows={3}
-                  value={actionReason}
-                  onChange={(e) => setActionReason(e.target.value)}
-                  placeholder="Explain why this request is rejected..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
-                />
-              </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Approval Notes / Payout Instruction (Optional):
-                </label>
-                <input
-                  type="text"
-                  value={actionReason}
-                  onChange={(e) => setActionReason(e.target.value)}
-                  placeholder="Optional note for audit logs..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            )}
-
-            <div className="flex space-x-3 pt-2">
-              <button
-                disabled={submitting}
-                onClick={() => setModalItem(null)}
-                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={submitting}
-                onClick={executeAction}
-                className={`flex-1 py-2.5 font-bold text-xs text-white rounded-xl ${
-                  modalItem.action === 'APPROVE'
-                    ? 'bg-emerald-600 hover:bg-emerald-500'
-                    : 'bg-rose-600 hover:bg-rose-500'
-                }`}
-              >
-                {submitting ? 'Processing...' : modalItem.action === 'APPROVE' ? 'Confirm & Disburse' : 'Confirm Rejection'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

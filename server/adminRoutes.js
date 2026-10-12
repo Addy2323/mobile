@@ -553,7 +553,10 @@ export function createAdminRouter(pool) {
       await client.query('BEGIN');
 
       const wRes = await client.query(
-        'SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE',
+        `SELECT w.*, u.name AS user_name, u.phone AS user_phone, u.email AS user_email
+         FROM withdrawal_requests w
+         LEFT JOIN users u ON w.user_id::text = u.id::text
+         WHERE w.id = $1 FOR UPDATE OF w`,
         [withdrawalId]
       );
 
@@ -574,6 +577,7 @@ export function createAdminRouter(pool) {
       const requestedAmount = Number(withdrawal.amount);
       const fee = Number(withdrawal.fee);
       const netPayout = Number(withdrawal.net_amount);
+      const payoutAmount = netPayout > 0 ? netPayout : requestedAmount;
 
       if (action === 'APPROVE') {
         // 1. Complete reserved debit in ledger for the exact reserved gross amount
@@ -587,12 +591,12 @@ export function createAdminRouter(pool) {
             adminUserId: req.adminUser.id,
             adminEmail: req.adminUser.email,
             fee,
-            netPayout,
+            netPayout: payoutAmount,
             approvedAt: new Date().toISOString()
           }
         });
 
-        // 2. Update withdrawal status to APPROVED / PROCESSING
+        // 2. Update withdrawal status to APPROVED
         await client.query(
           `UPDATE withdrawal_requests
            SET status = 'APPROVED', admin_reviewer_id = $1, updated_at = NOW()
@@ -602,30 +606,41 @@ export function createAdminRouter(pool) {
 
         await client.query('COMMIT');
 
-        // 3. Initiate payment provider payout asynchronously or synchronously
+        // 3. Initiate payment provider mobile/bank payout
         let providerResult = null;
-        try {
-          const dest = withdrawal.destination_details || {};
-          const destType = (withdrawal.destination_type || '').toUpperCase();
-          const isBank = destType === 'BANK';
+        let dest = withdrawal.destination_details || {};
+        if (typeof dest === 'string') {
+          try { dest = JSON.parse(dest); } catch {}
+        }
+        const destType = (withdrawal.destination_type || '').toUpperCase();
+        const isBank = destType === 'BANK';
+        const recipientPhone = dest.phone || dest.phoneNumber || dest.phone_number || dest.account_number || withdrawal.user_phone;
+        const recipientName = dest.recipient_name || dest.accountHolder || dest.account_holder || dest.name || withdrawal.user_name || 'LUMO Customer';
 
+        try {
           const payoutPayload = {
             splitId: withdrawal.reference_code,
-            amount: netPayout,
+            amount: payoutAmount,
             channel: isBank ? 'bank' : 'mobile',
-            recipientPhone: dest.phone || dest.phoneNumber,
-            recipientBank: dest.bankName || dest.bank,
-            recipientAccount: dest.accountNumber || dest.account,
-            recipientName: dest.accountHolder || dest.name || 'LUMO User',
+            recipientPhone,
+            recipientBank: dest.bankName || dest.bank || dest.bank_name,
+            recipientAccount: dest.accountNumber || dest.account || dest.account_number,
+            recipientName,
+            narration: `LUMO Withdrawal ${withdrawal.reference_code}`,
+            metadata: {
+              withdrawal_id: withdrawalId,
+              user_id: withdrawal.user_id,
+              reference_code: withdrawal.reference_code
+            },
             idempotencyKey: `wth_pay_${withdrawalId}_${Date.now()}`
           };
 
           providerResult = await SnippePaymentProvider.sendPayout(payoutPayload);
 
-          if (providerResult && providerResult.payoutId) {
+          if (providerResult && providerResult.payoutId && providerResult.status !== 'FAILED') {
             await pool.query(
               `UPDATE withdrawal_requests
-               SET status = $1, provider_tx_ref = $2, updated_at = NOW()
+               SET status = $1, provider_tx_ref = $2, rejection_reason = NULL, updated_at = NOW()
                WHERE id = $3`,
               [
                 providerResult.status === 'SETTLED' ? 'COMPLETED' : 'PROCESSING',
@@ -633,9 +648,23 @@ export function createAdminRouter(pool) {
                 withdrawalId
               ]
             );
+          } else {
+            const failureReason = providerResult?.failureReason || providerResult?.message || 'Payout could not be completed';
+            await pool.query(
+              `UPDATE withdrawal_requests
+               SET status = 'DISBURSEMENT_FAILED', rejection_reason = $1, updated_at = NOW()
+               WHERE id = $2`,
+              [failureReason, withdrawalId]
+            );
           }
         } catch (payoutErr) {
-          console.warn('[Admin Payout] Disbursement dispatch notice:', payoutErr.message);
+          console.warn('[Admin Payout] Disbursement dispatch error:', payoutErr.message);
+          await pool.query(
+            `UPDATE withdrawal_requests
+             SET status = 'DISBURSEMENT_FAILED', rejection_reason = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [payoutErr.message, withdrawalId]
+          );
         }
 
         await logAdminAuditAction(pool, {
@@ -645,14 +674,21 @@ export function createAdminRouter(pool) {
           resourceType: 'withdrawal',
           resourceId: withdrawalId,
           beforeState: { status: withdrawal.status, amount: requestedAmount },
-          afterState: { status: 'APPROVED', netPayout, fee, providerResult },
+          afterState: { status: 'APPROVED', netPayout: payoutAmount, fee, providerResult },
           ipAddress: req.ip
         });
 
+        const isDisbursementSuccess = providerResult && providerResult.payoutId && providerResult.status !== 'FAILED';
+
         res.json({
-          message: 'Withdrawal approved and debit completed successfully',
-          status: 'APPROVED',
-          netPayout,
+          success: isDisbursementSuccess,
+          status: isDisbursementSuccess ? (providerResult.status === 'SETTLED' ? 'COMPLETED' : 'PROCESSING') : 'DISBURSEMENT_FAILED',
+          message: isDisbursementSuccess
+            ? `Withdrawal approved & mobile money payout dispatched to ${recipientPhone} (Ref: ${providerResult.payoutId})`
+            : `Withdrawal approved in ledger, but Snippe mobile disbursement failed: ${providerResult?.failureReason || 'Disbursement rejected'}`,
+          payoutId: providerResult?.payoutId || null,
+          netPayout: payoutAmount,
+          recipientPhone,
           providerResult
         });
       } else if (action === 'REJECT') {
@@ -707,6 +743,107 @@ export function createAdminRouter(pool) {
       res.status(500).json({ error: err.message });
     } finally {
       client.release();
+    }
+  });
+
+  // Dedicated endpoint to disburse / retry mobile money payout for approved withdrawals
+  router.post('/withdrawals/:id/disburse', requirePermission('withdrawals.approve'), async (req, res) => {
+    const { id: withdrawalId } = req.params;
+    try {
+      const wRes = await pool.query(
+        `SELECT w.*, u.name AS user_name, u.phone AS user_phone, u.email AS user_email
+         FROM withdrawal_requests w
+         LEFT JOIN users u ON w.user_id::text = u.id::text
+         WHERE w.id = $1`,
+        [withdrawalId]
+      );
+
+      if (wRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Withdrawal request not found' });
+      }
+
+      const withdrawal = wRes.rows[0];
+      if (!['APPROVED', 'DISBURSEMENT_FAILED', 'PROCESSING'].includes(withdrawal.status)) {
+        return res.status(400).json({
+          error: `Cannot disburse payout for withdrawal in status ${withdrawal.status}. Must be APPROVED or DISBURSEMENT_FAILED.`
+        });
+      }
+
+      let dest = withdrawal.destination_details || {};
+      if (typeof dest === 'string') {
+        try { dest = JSON.parse(dest); } catch {}
+      }
+      const destType = (withdrawal.destination_type || '').toUpperCase();
+      const isBank = destType === 'BANK';
+      const recipientPhone = dest.phone || dest.phoneNumber || dest.phone_number || dest.account_number || withdrawal.user_phone;
+      const recipientName = dest.recipient_name || dest.accountHolder || dest.account_holder || dest.name || withdrawal.user_name || 'LUMO Customer';
+      const payoutAmount = Number(withdrawal.net_amount) > 0 ? Number(withdrawal.net_amount) : Number(withdrawal.amount);
+
+      const payoutPayload = {
+        splitId: withdrawal.reference_code,
+        amount: payoutAmount,
+        channel: isBank ? 'bank' : 'mobile',
+        recipientPhone,
+        recipientBank: dest.bankName || dest.bank || dest.bank_name,
+        recipientAccount: dest.accountNumber || dest.account || dest.account_number,
+        recipientName,
+        narration: `LUMO Payout ${withdrawal.reference_code}`,
+        metadata: {
+          withdrawal_id: withdrawalId,
+          user_id: withdrawal.user_id,
+          reference_code: withdrawal.reference_code,
+          retry: true
+        },
+        idempotencyKey: `wth_retry_${withdrawalId}_${Date.now()}`
+      };
+
+      const providerResult = await SnippePaymentProvider.sendPayout(payoutPayload);
+
+      if (providerResult && providerResult.payoutId && providerResult.status !== 'FAILED') {
+        await pool.query(
+          `UPDATE withdrawal_requests
+           SET status = $1, provider_tx_ref = $2, rejection_reason = NULL, updated_at = NOW()
+           WHERE id = $3`,
+          [
+            providerResult.status === 'SETTLED' ? 'COMPLETED' : 'PROCESSING',
+            providerResult.payoutId,
+            withdrawalId
+          ]
+        );
+      } else {
+        const failureReason = providerResult?.failureReason || providerResult?.message || 'Payout failed';
+        await pool.query(
+          `UPDATE withdrawal_requests
+           SET status = 'DISBURSEMENT_FAILED', rejection_reason = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [failureReason, withdrawalId]
+        );
+      }
+
+      await logAdminAuditAction(pool, {
+        adminUserId: req.adminUser.id,
+        adminEmail: req.adminUser.email,
+        action: 'WITHDRAWAL_PAYOUT_TRIGGERED',
+        resourceType: 'withdrawal',
+        resourceId: withdrawalId,
+        beforeState: { status: withdrawal.status },
+        afterState: { providerResult, amount: payoutAmount },
+        ipAddress: req.ip
+      });
+
+      const isSuccess = providerResult && providerResult.payoutId && providerResult.status !== 'FAILED';
+      res.json({
+        success: isSuccess,
+        status: isSuccess ? (providerResult.status === 'SETTLED' ? 'COMPLETED' : 'PROCESSING') : 'DISBURSEMENT_FAILED',
+        message: isSuccess
+          ? `Mobile money payout successfully dispatched to ${recipientPhone} (Ref: ${providerResult.payoutId})`
+          : `Disbursement failed at Snippe gateway: ${providerResult?.failureReason || 'Provider error'}`,
+        payoutId: providerResult?.payoutId || null,
+        providerResult
+      });
+    } catch (err) {
+      console.error('[admin/withdrawals/disburse error]:', err);
+      res.status(500).json({ error: err.message });
     }
   });
 
