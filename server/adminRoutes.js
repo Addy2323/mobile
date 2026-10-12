@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { createAdminAuthMiddleware, requirePermission, logAdminAuditAction, hashPassword } from './adminAuth.js';
 import { ApplicationIntegrationService } from './applicationIntegrationService.js';
+import { LedgerService } from './ledgerService.js';
+import { SnippePaymentProvider } from './snippeProvider.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -436,6 +438,212 @@ export function createAdminRouter(pool) {
       res.json({ message: 'Settlement retry queued with idempotency check', settlementId });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // WITHDRAWALS MANAGEMENT & ADMIN APPROVAL / REJECTION / DISBURSEMENT
+  // -------------------------------------------------------------
+  router.get('/withdrawals', requirePermission('settlements.view'), async (req, res) => {
+    try {
+      const { status, limit = 50, offset = 0 } = req.query;
+      let sql = `
+        SELECT 
+          w.*,
+          u.name AS user_name,
+          u.phone AS user_phone,
+          u.email AS user_email
+        FROM withdrawal_requests w
+        LEFT JOIN users u ON w.user_id = u.id
+        WHERE 1=1
+      `;
+      const params = [];
+      if (status) {
+        params.push(status);
+        sql += ` AND w.status = $${params.length}`;
+      }
+      sql += ' ORDER BY w.created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+      params.push(parseInt(limit), parseInt(offset));
+
+      const { rows } = await pool.query(sql, params);
+      res.json(rows.map(r => ({
+        ...r,
+        amount: Number(r.amount),
+        fee: Number(r.fee),
+        net_amount: Number(r.net_amount)
+      })));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/withdrawals/:id/action', requirePermission('settlements.retry'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const withdrawalId = req.params.id;
+      const { action, reason } = req.body;
+
+      if (!['APPROVE', 'REJECT'].includes(action)) {
+        return res.status(400).json({ error: 'Action must be APPROVE or REJECT' });
+      }
+
+      await client.query('BEGIN');
+
+      const wRes = await client.query(
+        'SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE',
+        [withdrawalId]
+      );
+
+      if (wRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Withdrawal request not found' });
+      }
+
+      const withdrawal = wRes.rows[0];
+
+      if (withdrawal.status !== 'PENDING_REVIEW') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `Cannot ${action.toLowerCase()} withdrawal with status ${withdrawal.status}. Must be PENDING_REVIEW.`
+        });
+      }
+
+      const requestedAmount = Number(withdrawal.amount);
+      const fee = Number(withdrawal.fee);
+      const netPayout = Number(withdrawal.net_amount);
+
+      if (action === 'APPROVE') {
+        // 1. Complete reserved debit in ledger for the exact reserved gross amount
+        await LedgerService.completeReservedDebit(client, {
+          userId: withdrawal.user_id,
+          amount: requestedAmount,
+          transactionType: 'WITHDRAWAL_PAYOUT',
+          referenceType: 'WITHDRAWAL',
+          referenceId: withdrawal.reference_code,
+          metadata: {
+            adminUserId: req.adminUser.id,
+            adminEmail: req.adminUser.email,
+            fee,
+            netPayout,
+            approvedAt: new Date().toISOString()
+          }
+        });
+
+        // 2. Update withdrawal status to APPROVED / PROCESSING
+        await client.query(
+          `UPDATE withdrawal_requests
+           SET status = 'APPROVED', admin_reviewer_id = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [req.adminUser.id, withdrawalId]
+        );
+
+        await client.query('COMMIT');
+
+        // 3. Initiate payment provider payout asynchronously or synchronously
+        let providerResult = null;
+        try {
+          const dest = withdrawal.destination_details || {};
+          const destType = (withdrawal.destination_type || '').toUpperCase();
+          const isBank = destType === 'BANK';
+
+          const payoutPayload = {
+            splitId: withdrawal.reference_code,
+            amount: netPayout,
+            channel: isBank ? 'bank' : 'mobile',
+            recipientPhone: dest.phone || dest.phoneNumber,
+            recipientBank: dest.bankName || dest.bank,
+            recipientAccount: dest.accountNumber || dest.account,
+            recipientName: dest.accountHolder || dest.name || 'LUMO User',
+            idempotencyKey: `wth_pay_${withdrawalId}_${Date.now()}`
+          };
+
+          providerResult = await SnippePaymentProvider.sendPayout(payoutPayload);
+
+          if (providerResult && providerResult.payoutId) {
+            await pool.query(
+              `UPDATE withdrawal_requests
+               SET status = $1, provider_tx_ref = $2, updated_at = NOW()
+               WHERE id = $3`,
+              [
+                providerResult.status === 'SETTLED' ? 'COMPLETED' : 'PROCESSING',
+                providerResult.payoutId,
+                withdrawalId
+              ]
+            );
+          }
+        } catch (payoutErr) {
+          console.warn('[Admin Payout] Disbursement dispatch notice:', payoutErr.message);
+        }
+
+        await logAdminAuditAction(pool, {
+          adminUserId: req.adminUser.id,
+          adminEmail: req.adminUser.email,
+          action: 'WITHDRAWAL_APPROVED',
+          resourceType: 'withdrawal',
+          resourceId: withdrawalId,
+          beforeState: { status: withdrawal.status, amount: requestedAmount },
+          afterState: { status: 'APPROVED', netPayout, fee, providerResult },
+          ipAddress: req.ip
+        });
+
+        res.json({
+          message: 'Withdrawal approved and debit completed successfully',
+          status: 'APPROVED',
+          netPayout,
+          providerResult
+        });
+      } else if (action === 'REJECT') {
+        if (!reason) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Reason is required for rejection' });
+        }
+
+        // 1. Release reserved funds back to user's available balance
+        await LedgerService.releaseReservation(client, {
+          userId: withdrawal.user_id,
+          amount: requestedAmount,
+          referenceType: 'WITHDRAWAL',
+          referenceId: withdrawal.reference_code,
+          metadata: {
+            adminUserId: req.adminUser.id,
+            rejectionReason: reason,
+            rejectedAt: new Date().toISOString()
+          }
+        });
+
+        // 2. Mark withdrawal as REJECTED
+        await client.query(
+          `UPDATE withdrawal_requests
+           SET status = 'REJECTED', admin_reviewer_id = $1, rejection_reason = $2, updated_at = NOW()
+           WHERE id = $3`,
+          [req.adminUser.id, reason, withdrawalId]
+        );
+
+        await client.query('COMMIT');
+
+        await logAdminAuditAction(pool, {
+          adminUserId: req.adminUser.id,
+          adminEmail: req.adminUser.email,
+          action: 'WITHDRAWAL_REJECTED',
+          resourceType: 'withdrawal',
+          resourceId: withdrawalId,
+          beforeState: { status: withdrawal.status },
+          afterState: { status: 'REJECTED', reason, releasedAmount: requestedAmount },
+          ipAddress: req.ip
+        });
+
+        res.json({
+          message: 'Withdrawal rejected and funds released back to user available balance',
+          status: 'REJECTED',
+          releasedAmount: requestedAmount
+        });
+      }
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('[admin/withdrawals/action error]:', err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
     }
   });
 

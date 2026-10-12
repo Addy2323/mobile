@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateUser } from './userAuth.js';
 import { LedgerService, calculateVipTier } from './ledgerService.js';
 import { SnippePaymentProvider } from './snippeProvider.js';
+import { WithdrawalService } from './withdrawalService.js';
 
 export function createMeRouter(pool) {
   const router = express.Router();
@@ -506,52 +507,107 @@ export function createMeRouter(pool) {
   });
 
   // -------------------------------------------------------------
-  // 9. POST /api/me/withdrawals/request - Submit withdrawal request
+  // -------------------------------------------------------------
+  // 9a. GET /api/me/withdrawals/quote - Authoritative fee & payout preview
+  // -------------------------------------------------------------
+  router.get('/withdrawals/quote', async (req, res) => {
+    try {
+      const { amount } = req.query;
+      const balance = await LedgerService.getOrCreateUserBalance(pool, req.user.id);
+      const financials = WithdrawalService.calculateWithdrawalFinancials(
+        amount,
+        balance.available_balance
+      );
+      res.json(financials);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // 9b. POST /api/me/withdrawals/request - Submit withdrawal request
   // -------------------------------------------------------------
   router.post('/withdrawals/request', async (req, res) => {
     const client = await pool.connect();
     try {
       const { amount, destinationType, destinationDetails } = req.body;
-      const numAmount = Number(amount);
 
-      if (!numAmount || numAmount <= 0) {
-        return res.status(400).json({ error: 'Valid withdrawal amount required.' });
-      }
-      if (!destinationType || !destinationDetails) {
-        return res.status(400).json({ error: 'Destination type and details are required.' });
-      }
+      // 1. Destination validation
+      WithdrawalService.validateDestination(destinationType, destinationDetails);
 
       await client.query('BEGIN');
 
-      const fee = numAmount > 100000 ? 2000 : 1000;
-      const totalDebit = numAmount + fee;
+      // 2. Fetch current balance with row-level lock
+      const balance = await LedgerService.getOrCreateUserBalance(client, req.user.id);
+
+      // 3. Authoritative financial calculation (requested amount, fee, net payout)
+      const financials = WithdrawalService.calculateWithdrawalFinancials(
+        amount,
+        balance.available_balance
+      );
 
       const refCode = `WTH-${Date.now().toString().slice(-6)}`;
       const idempotencyKey = `wth_res_${req.user.id}_${Date.now()}`;
 
+      // 4. Reserve EXACTLY requestedAmount (never over-deducts or reserves entire balance)
       await LedgerService.reserveFunds(client, {
         userId: req.user.id,
-        amount: totalDebit,
+        amount: financials.requestedAmount,
         transactionType: 'WITHDRAWAL_RESERVE',
         referenceType: 'WITHDRAWAL',
         referenceId: refCode,
         idempotencyKey,
-        metadata: { destinationType, destinationDetails, requestedAmount: numAmount, fee }
+        metadata: {
+          destinationType,
+          destinationDetails,
+          requestedAmount: financials.requestedAmount,
+          feeAmount: financials.feeAmount,
+          netPayout: financials.netPayout,
+          tierRate: financials.tierRate,
+          tierLabel: financials.tierLabel,
+          configVersion: financials.configVersion
+        }
       });
 
+      // 5. Store withdrawal request record with strictly preserved amounts
       const wthRes = await client.query(
-        `INSERT INTO withdrawal_requests (user_id, amount, fee, net_amount, destination_type, destination_details, status, reference_code)
-         VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_REVIEW', $7)
-         RETURNING *`,
-        [req.user.id, totalDebit, fee, numAmount, destinationType, destinationDetails, refCode]
+        `INSERT INTO withdrawal_requests (
+          user_id, amount, fee, net_amount, currency, destination_type, destination_details, status, reference_code
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING_REVIEW', $8)
+        RETURNING *`,
+        [
+          req.user.id,
+          financials.requestedAmount,
+          financials.feeAmount,
+          financials.netPayout,
+          financials.currency,
+          destinationType,
+          destinationDetails,
+          refCode
+        ]
       );
 
       await client.query('COMMIT');
 
+      // 6. Return response with remaining available balance and full breakdown
+      const remainingAvailable = Number(balance.available_balance) - financials.requestedAmount;
+
       res.json({
         success: true,
         message: 'Withdrawal requested and funds reserved successfully.',
-        withdrawal: wthRes.rows[0]
+        withdrawal: {
+          ...wthRes.rows[0],
+          amount: financials.requestedAmount,
+          fee: financials.feeAmount,
+          net_amount: financials.netPayout
+        },
+        financials: {
+          requestedAmount: financials.requestedAmount,
+          feeAmount: financials.feeAmount,
+          netPayout: financials.netPayout,
+          reservedAmount: financials.requestedAmount,
+          remainingAvailableBalance: remainingAvailable
+        }
       });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -568,10 +624,20 @@ export function createMeRouter(pool) {
   router.get('/withdrawals', async (req, res) => {
     try {
       const { rows } = await pool.query(
-        `SELECT * FROM withdrawal_requests WHERE user_id = $1 ORDER BY created_at DESC`,
+        `SELECT id, user_id, amount, fee, net_amount, currency, destination_type, destination_details, status, reference_code, rejection_reason, provider_tx_ref, created_at, updated_at
+         FROM withdrawal_requests
+         WHERE user_id = $1
+         ORDER BY created_at DESC`,
         [req.user.id]
       );
-      res.json({ withdrawals: rows });
+      res.json({
+        withdrawals: rows.map(r => ({
+          ...r,
+          amount: Number(r.amount),
+          fee: Number(r.fee),
+          net_amount: Number(r.net_amount)
+        }))
+      });
     } catch (err) {
       console.error('[me/withdrawals error]:', err);
       res.status(500).json({ error: err.message });

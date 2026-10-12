@@ -461,7 +461,10 @@ export const AdminWithdrawalsScreen: React.FC<OpsProps> = ({ token }) => {
               withdrawals.map((w) => (
                 <tr key={w.id} className="hover:bg-slate-900/40">
                   <td className="p-4 font-mono text-amber-400 font-bold">{w.reference_code}</td>
-                  <td className="p-4 font-mono text-slate-400 text-[11px]">{w.user_id}</td>
+                  <td className="p-4 text-slate-300 text-[11px]">
+                    <div className="font-semibold text-white">{w.user_name || 'Member'}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{w.user_phone || w.user_id}</div>
+                  </td>
                   <td className="p-4">
                     <div className="font-semibold text-white">{w.destination_type}</div>
                     <div className="text-[11px] text-slate-400 font-mono">

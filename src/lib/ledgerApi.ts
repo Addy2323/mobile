@@ -146,6 +146,15 @@ export async function checkDepositStatus(depositRef?: string, providerTxRef?: st
   return res.json();
 }
 
+export async function fetchWithdrawalQuote(amount: number) {
+  const res = await authFetch(`${API_BASE}/me/withdrawals/quote?amount=${amount}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Could not fetch fee quote');
+  }
+  return res.json();
+}
+
 export async function requestWithdrawal(amount: number, destinationType: 'MOBILE_MONEY' | 'BANK', destinationDetails: any) {
   const res = await authFetch(`${API_BASE}/me/withdrawals/request`, {
     method: 'POST',
