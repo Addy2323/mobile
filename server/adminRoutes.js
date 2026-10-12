@@ -1538,6 +1538,64 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // -------------------------------------------------------------
+  // CAMPAIGNS, CHARITY & SAVINGS INSPECTION
+  // -------------------------------------------------------------
+  router.get('/campaigns', requirePermission('splits.view'), async (req, res) => {
+    try {
+      const { category_type, query, status } = req.query;
+      let sql = `
+        SELECT 
+          m.id,
+          m.title,
+          m.event_type,
+          COALESCE(m.category_type, 'GENERAL') AS category_type,
+          m.target_amount,
+          COALESCE(m.collected_amount, 0) AS collected_amount,
+          COALESCE(m.retained_savings, 0) AS retained_savings,
+          COALESCE(m.total_withdrawn, 0) AS total_withdrawn,
+          m.currency,
+          m.status,
+          m.owner_user_id,
+          m.beneficiary_organization,
+          m.beneficiary_name,
+          m.created_at,
+          COUNT(p.id) AS raw_payment_count,
+          COUNT(DISTINCT COALESCE(p.contributor_user_id, p.payer_phone, p.payer_name)) AS distinct_contributor_count
+        FROM michango_events m
+        LEFT JOIN public_link_payments p ON p.link_id = m.id AND p.status = 'COMPLETED'
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (category_type && category_type !== 'ALL') {
+        params.push(category_type.toUpperCase());
+        sql += ` AND UPPER(COALESCE(m.category_type, 'GENERAL')) = $${params.length}`;
+      }
+
+      if (status) {
+        params.push(status);
+        sql += ` AND m.status = $${params.length}`;
+      }
+
+      if (query) {
+        params.push(`%${query}%`);
+        sql += ` AND (m.title ILIKE $${params.length} OR m.beneficiary_organization ILIKE $${params.length} OR m.beneficiary_name ILIKE $${params.length})`;
+      }
+
+      sql += `
+        GROUP BY m.id
+        ORDER BY m.created_at DESC
+        LIMIT 100
+      `;
+
+      const { rows } = await pool.query(sql, params);
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 }
 

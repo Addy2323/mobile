@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Gift, EyeOff, Sparkles, Heart, Check, Copy, MessageCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Gift, EyeOff, Sparkles, Heart, Check, Copy, MessageCircle, RefreshCw, FileDown, Download } from 'lucide-react';
 import { formatMoney } from '@/lib/utils';
 import ProgressBar from '@/components/ProgressBar';
 import { getTranslation, type Language } from '@/lib/i18n';
@@ -29,8 +29,54 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
   const [loadingContributors, setLoadingContributors] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [downloadingSummaryPdf, setDownloadingSummaryPdf] = useState(false);
+  const [downloadingStatementKey, setDownloadingStatementKey] = useState<string | null>(null);
 
   const t = (key: any) => getTranslation(key, language);
+
+  const downloadSummaryPdf = async () => {
+    if (!currentPool) return;
+    setDownloadingSummaryPdf(true);
+    try {
+      const res = await fetch(`/api/campaigns/BIRTHDAY/${currentPool.id}/reports/pdf?timeframe=all`);
+      if (!res.ok) throw new Error('Failed to generate birthday pool PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentPool.birthday_person}_Birthday_Summary.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(`Download Error: ${err.message}`);
+    } finally {
+      setDownloadingSummaryPdf(false);
+    }
+  };
+
+  const downloadStatementPdf = async (payerPhone: string, payerName: string) => {
+    if (!currentPool) return;
+    setDownloadingStatementKey(payerPhone || payerName);
+    try {
+      const res = await fetch(`/api/campaigns/BIRTHDAY/${currentPool.id}/statements/${encodeURIComponent(payerPhone || payerName)}/pdf?timeframe=all`);
+      if (!res.ok) throw new Error('Failed to generate statement PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${payerName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Statement.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(`Statement Download Error: ${err.message}`);
+    } finally {
+      setDownloadingStatementKey(null);
+    }
+  };
 
   async function fetchPools() {
     setLoadingPools(true);
@@ -325,6 +371,19 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
                 <span>{copied ? 'Copied!' : 'Copy Link'}</span>
               </button>
             </div>
+
+            <button
+              onClick={downloadSummaryPdf}
+              disabled={downloadingSummaryPdf}
+              className="w-full py-3 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 flex items-center justify-center space-x-1.5 text-xs transition-all disabled:opacity-50"
+            >
+              {downloadingSummaryPdf ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>{downloadingSummaryPdf ? 'Generating Report...' : 'Download Birthday Summary PDF'}</span>
+            </button>
           </div>
 
           {/* Real Contributors Tracker */}
@@ -349,18 +408,35 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
               <p className="text-xs text-white/40 text-center py-4">No contributions received yet. Share the link above!</p>
             ) : (
               <div className="space-y-2">
-                {contributors.map((c) => (
-                  <div key={c.id} className="p-3 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-white text-xs">{c.payer_name}</p>
-                      <p className="text-[10px] text-white/50 font-mono">{c.payer_phone}</p>
+                {contributors.map((c: any) => {
+                  const isDownloading = downloadingStatementKey === (c.payer_phone || c.payer_name);
+                  return (
+                    <div key={c.id} className="p-3 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-white text-xs">{c.payer_name}</p>
+                        <p className="text-[10px] text-white/50 font-mono">{c.payer_phone}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="text-right">
+                          <span className="font-black text-[#00E599] text-xs block">+{formatMoney(Number(c.amount))}</span>
+                          <span className="text-[9px] text-white/40">{new Date(c.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <button
+                          onClick={() => downloadStatementPdf(c.payer_phone, c.payer_name)}
+                          disabled={isDownloading}
+                          title="Download Contributor Statement PDF"
+                          className="p-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-[#00E599] rounded-xl border border-white/10 transition-colors"
+                        >
+                          {isDownloading ? (
+                            <RefreshCw className="w-3 h-3 animate-spin text-[#00E599]" />
+                          ) : (
+                            <FileDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="font-black text-[#00E599] text-xs block">+{formatMoney(Number(c.amount))}</span>
-                      <span className="text-[9px] text-white/40">{new Date(c.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

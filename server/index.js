@@ -17,6 +17,7 @@ import { getUserJwtSecret } from './userAuth.js';
 import jwt from 'jsonwebtoken';
 import { smsService } from './smsService.js';
 import { LedgerService, calculateVipTier } from './ledgerService.js';
+import { createCampaignRouter } from './campaignRoutes.js';
 
 dotenv.config();
 
@@ -163,8 +164,29 @@ async function autoMigrateOnStartup(p) {
 
       ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(128);
       ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS collected_amount NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS event_date DATE;
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS closing_date TIMESTAMPTZ;
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS is_secret BOOLEAN DEFAULT true;
+      ALTER TABLE birthday_pools ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+
       ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(128);
       ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS collected_amount NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS category_type VARCHAR(32) DEFAULT 'GENERAL';
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS beneficiary_name VARCHAR(128);
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS beneficiary_phone VARCHAR(32);
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS beneficiary_organization VARCHAR(255);
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT true;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS retained_savings NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS total_withdrawn NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE michango_events ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+
+      ALTER TABLE public_link_payments ADD COLUMN IF NOT EXISTS contributor_user_id VARCHAR(128);
+      ALTER TABLE public_link_payments ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT false;
+      ALTER TABLE public_link_payments ADD COLUMN IF NOT EXISTS refunded_amount NUMERIC(15, 2) DEFAULT 0;
+      ALTER TABLE public_link_payments ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
 
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS application_id VARCHAR(64);
       ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS webhook_url_used TEXT;
@@ -253,6 +275,7 @@ app.post('/api/auth/check-phone', authIpLimit(900000, 60));
 app.use('/api/auth', createAuthRouter(pool));
 app.use('/api/releases', createReleaseRouter(pool));
 app.use('/api/me', createMeRouter(pool));
+app.use('/api/campaigns', createCampaignRouter(pool, resolveUser));
 
 // Secure helper to resolve authenticated user identity from Bearer token or explicit user ID
 export function resolveUser(req) {
@@ -1007,8 +1030,8 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
       });
     }
 
-    // 4. Check michango_events table (supports full uuid or MCHANG- prefix)
-    const mchangRaw = token.replace(/^MCHANG-/i, '');
+    // 4. Check michango_events table (supports full uuid, MCHANG-, CHARITY-, or SAVE- prefix)
+    const mchangRaw = token.replace(/^(MCHANG|CHARITY|SAVE)-/i, '');
     const mchangRes = await pool.query(
       `SELECT * FROM michango_events 
        WHERE UPPER(id::text) = UPPER($1) 
@@ -1021,16 +1044,23 @@ app.get(['/api/public/payment-links/:token', '/api/public/pay/:token'], async (r
 
     if (mchangRes.rows.length > 0) {
       const evRow = mchangRes.rows[0];
+      const categoryType = (evRow.category_type || (evRow.event_type === 'CHARITY' ? 'CHARITY' : evRow.event_type === 'SAVINGS' ? 'SAVINGS' : 'GENERAL')).toUpperCase();
+      const prefix = categoryType === 'CHARITY' ? 'CHARITY' : categoryType === 'SAVINGS' ? 'SAVE' : 'MCHANG';
       return res.json({
-        type: 'MCHANGO',
+        type: categoryType === 'CHARITY' ? 'CHARITY' : categoryType === 'SAVINGS' ? 'SAVINGS' : 'MCHANGO',
+        categoryType,
         id: evRow.id,
-        token: `MCHANG-${evRow.id.slice(0, 6)}`,
+        token: `${prefix}-${evRow.id.slice(0, 6).toUpperCase()}`,
         title: evRow.title,
+        description: evRow.description || '',
+        beneficiaryName: evRow.beneficiary_name || null,
+        beneficiaryOrganization: evRow.beneficiary_organization || null,
         amount: parseInt(evRow.target_amount, 10),
         collectedAmount: parseInt(evRow.collected_amount || 0, 10),
+        retainedSavings: parseInt(evRow.retained_savings || 0, 10),
         currency: evRow.currency,
         status: evRow.status,
-        organizerName: 'Community Organizer',
+        organizerName: categoryType === 'CHARITY' ? (evRow.beneficiary_organization || 'Charity Organization') : categoryType === 'SAVINGS' ? 'Personal Savings Goal' : 'Community Organizer',
         destinationSnapshot: evRow.destination_snapshot || PaymentRoutingService.createSnapshot(null)
       });
     }
@@ -1228,8 +1258,8 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
       });
     }
 
-    // 3. Try michango_events table
-    const mchangRaw = token.replace(/^MCHANG-/i, '');
+    // 3. Try michango_events table (supports MCHANG-, CHARITY-, SAVE-, or UUID)
+    const mchangRaw = token.replace(/^(MCHANG|CHARITY|SAVE)-/i, '');
     const mchangRes = await client.query(
       `SELECT * FROM michango_events 
        WHERE UPPER(id::text) = UPPER($1) 
@@ -1243,7 +1273,9 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
     if (mchangRes.rows.length > 0) {
       const evRow = mchangRes.rows[0];
       const amountToPay = Number(amount || 50000);
-      const txRef = `MCHANG-${Date.now().toString().slice(-6)}`;
+      const categoryType = (evRow.category_type || (evRow.event_type === 'CHARITY' ? 'CHARITY' : evRow.event_type === 'SAVINGS' ? 'SAVINGS' : 'GENERAL')).toUpperCase();
+      const prefix = categoryType === 'CHARITY' ? 'CHARITY' : categoryType === 'SAVINGS' ? 'SAVE' : 'MCHANG';
+      const txRef = `${prefix}-${Date.now().toString().slice(-6)}`;
 
       let providerTxRef = txRef;
       try {
@@ -1253,44 +1285,71 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
           splitId: token,
           participantId: phone,
           participantName: finalPayerName,
-          idempotencyKey: `pay_mchang_${evRow.id}_${Date.now()}`
+          idempotencyKey: `pay_${prefix.toLowerCase()}_${evRow.id}_${Date.now()}`
         });
         if (snippeResult && snippeResult.providerTxRef) providerTxRef = snippeResult.providerTxRef;
       } catch (e) {
         console.warn('[Snippe Notice] Continuing with system reference:', e.message);
       }
 
-      // Update event collected amount
-      await client.query(
-        'UPDATE michango_events SET collected_amount = COALESCE(collected_amount, 0) + $1, updated_at = NOW() WHERE id = $2',
-        [amountToPay, evRow.id]
-      );
+      // Update event collected amount (and retained_savings if savings goal)
+      if (categoryType === 'SAVINGS') {
+        await client.query(
+          `UPDATE michango_events 
+           SET collected_amount = COALESCE(collected_amount, 0) + $1,
+               retained_savings = COALESCE(retained_savings, 0) + $1,
+               updated_at = NOW() 
+           WHERE id = $2`,
+          [amountToPay, evRow.id]
+        );
+      } else {
+        await client.query(
+          'UPDATE michango_events SET collected_amount = COALESCE(collected_amount, 0) + $1, updated_at = NOW() WHERE id = $2',
+          [amountToPay, evRow.id]
+        );
+      }
+
+      const isAnonymous = !!req.body.is_anonymous;
+      const contributorUserId = resolveUser(req) || req.body.contributor_user_id || null;
 
       // Record contributor payment
       await client.query(
-        `INSERT INTO public_link_payments (link_type, link_token, link_id, owner_user_id, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref)
-         VALUES ('MCHANGO', $1, $2, $3, $4, $5, $6, $7, $8, 'COMPLETED', $9)`,
-        [token, evRow.id, evRow.owner_user_id || 'system_organizer', finalPayerName, phone, amountToPay, evRow.currency || 'TZS', payment_method, providerTxRef]
+        `INSERT INTO public_link_payments (link_type, link_token, link_id, owner_user_id, payer_name, payer_phone, amount, currency, payment_method, status, provider_tx_ref, contributor_user_id, is_anonymous)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'COMPLETED', $10, $11, $12)`,
+        [
+          categoryType,
+          token,
+          evRow.id,
+          evRow.owner_user_id || 'system_organizer',
+          finalPayerName,
+          phone,
+          amountToPay,
+          evRow.currency || 'TZS',
+          payment_method,
+          providerTxRef,
+          contributorUserId,
+          isAnonymous
+        ]
       );
 
-      // AUTOMATIC WALLET / CARD BALANCE CREDITING FOR ORGANIZER
-      if (evRow.owner_user_id) {
+      // AUTOMATIC WALLET / CARD BALANCE CREDITING FOR ORGANIZER (if not savings goal which retains balance in goal)
+      if (evRow.owner_user_id && categoryType !== 'SAVINGS') {
         await LedgerService.getOrCreateUserBalance(client, evRow.owner_user_id);
         await LedgerService.postCredit(client, {
           userId: evRow.owner_user_id,
           amount: amountToPay,
-          transactionType: 'MCHANGO',
-          referenceType: 'MCHANGO',
-          referenceId: `MCHANG-${evRow.id.slice(0, 6)}`,
+          transactionType: categoryType,
+          referenceType: categoryType,
+          referenceId: `${prefix}-${evRow.id.slice(0, 6)}`,
           providerTxRef,
-          idempotencyKey: `credit_mchang_${evRow.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          idempotencyKey: `credit_${prefix.toLowerCase()}_${evRow.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           metadata: {
             payerName: finalPayerName,
             payerPhone: phone,
             title: evRow.title,
             paymentMethod: payment_method,
             linkToken: token,
-            source: 'MCHANGO'
+            source: categoryType
           }
         });
       }
@@ -1418,10 +1477,30 @@ app.get('/api/birthday-pools', async (req, res) => {
   }
 });
 
-// --- MICHANGO / COMMUNITY EVENTS ---
+// --- MICHANGO / COMMUNITY / CHARITY / SAVINGS EVENTS ---
 app.post('/api/michango-events', async (req, res) => {
   try {
-    const { title, event_type = 'WEDDING', description, target_amount, currency = 'TZS', owner_user_id = null, destination_id = null, destination = null } = req.body;
+    const {
+      title,
+      event_type = 'WEDDING',
+      category_type = 'GENERAL',
+      description,
+      target_amount,
+      currency = 'TZS',
+      owner_user_id = null,
+      destination_id = null,
+      destination = null,
+      beneficiary_name = null,
+      beneficiary_phone = null,
+      beneficiary_organization = null,
+      start_date = null,
+      end_date = null,
+      image_url = null,
+      is_public = true
+    } = req.body;
+
+    const resolvedOwnerId = resolveUser(req) || owner_user_id || null;
+
     let destRecord = null;
     if (destination_id) {
       const dRes = await pool.query('SELECT * FROM payment_destinations WHERE id = $1', [destination_id]);
@@ -1432,29 +1511,65 @@ app.post('/api/michango-events', async (req, res) => {
       const dRes = await pool.query(
         `INSERT INTO payment_destinations (owner_user_id, type, provider, display_name, phone_number, lipa_number, bank_name, account_number, beneficiary_full_name, qr_reference, card_reference, is_verified)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING *`,
-        [owner_user_id, validated.type, validated.provider || 'MOBILE_MONEY', label, validated.phone_number || null, validated.lipa_number || null, validated.bank_name || null, validated.account_number || null, validated.beneficiary_full_name || null, validated.qr_reference || null, validated.card_reference || null]
+        [resolvedOwnerId, validated.type, validated.provider || 'MOBILE_MONEY', label, validated.phone_number || null, validated.lipa_number || null, validated.bank_name || null, validated.account_number || null, validated.beneficiary_full_name || null, validated.qr_reference || null, validated.card_reference || null]
       );
       destRecord = dRes.rows[0];
     }
 
     const destSnapshot = PaymentRoutingService.createSnapshot(destRecord);
+    const catType = (category_type || (event_type === 'CHARITY' ? 'CHARITY' : event_type === 'SAVINGS' ? 'SAVINGS' : 'GENERAL')).toUpperCase();
+
     const { rows } = await pool.query(
-      `INSERT INTO michango_events (owner_user_id, title, event_type, description, target_amount, currency, status, destination_id, destination_snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7, $8) RETURNING *`,
-      [owner_user_id, title, event_type, description, target_amount, currency, destRecord ? destRecord.id : null, destSnapshot]
+      `INSERT INTO michango_events (
+        owner_user_id, title, event_type, category_type, description, target_amount, currency, status,
+        destination_id, destination_snapshot, beneficiary_name, beneficiary_phone, beneficiary_organization,
+        start_date, end_date, image_url, is_public, retained_savings, total_withdrawn
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8, $9, $10, $11, $12, COALESCE($13, NOW()), $14, $15, $16, 0, 0) RETURNING *`,
+      [
+        resolvedOwnerId,
+        title,
+        event_type,
+        catType,
+        description,
+        target_amount ? Number(target_amount) : 0,
+        currency,
+        destRecord ? destRecord.id : null,
+        destSnapshot,
+        beneficiary_name,
+        beneficiary_phone,
+        beneficiary_organization,
+        start_date,
+        end_date,
+        image_url,
+        is_public !== false
+      ]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
+    console.error('[POST /api/michango-events error]:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/michango-events', async (req, res) => {
   try {
-    const { owner_user_id } = req.query;
-    let query = 'SELECT * FROM michango_events';
+    const { owner_user_id, category_type } = req.query;
+    const resolvedOwnerId = resolveUser(req) || owner_user_id || null;
+
+    let query = 'SELECT * FROM michango_events WHERE 1=1';
     const values = [];
-    if (owner_user_id) { query += ' WHERE owner_user_id = $1'; values.push(owner_user_id); }
+
+    if (resolvedOwnerId) {
+      values.push(resolvedOwnerId);
+      query += ` AND owner_user_id = $${values.length}`;
+    }
+
+    if (category_type && category_type !== 'ALL') {
+      values.push(category_type.toUpperCase());
+      query += ` AND UPPER(category_type) = $${values.length}`;
+    }
+
     query += ' ORDER BY created_at DESC';
     const { rows } = await pool.query(query, values);
     res.json(rows);

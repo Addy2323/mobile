@@ -13,10 +13,14 @@ interface FriendPaymentScreenProps {
 type PaymentStep = 'loading' | 'error' | 'method' | 'phone' | 'waiting' | 'success';
 
 export interface PublicPaymentData {
-  type: 'PAYMENT_LINK' | 'SPLIT' | 'BIRTHDAY_POOL' | 'MCHANGO';
+  type: 'PAYMENT_LINK' | 'SPLIT' | 'BIRTHDAY_POOL' | 'MCHANGO' | 'CHARITY' | 'SAVINGS';
+  categoryType?: string;
   id: string;
   token: string;
   title: string;
+  description?: string;
+  beneficiaryName?: string | null;
+  beneficiaryOrganization?: string | null;
   amount: number;
   collectedAmount?: number;
   currency: string;
@@ -43,6 +47,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   const [provider, setProvider] = useState<'mobile' | 'bank' | 'card'>('mobile');
   const [payerName, setPayerName] = useState('');
   const [customAmount, setCustomAmount] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [phone, setPhone] = useState('');
   const [countdown, setCountdown] = useState(45);
   const [txRef, setTxRef] = useState('');
@@ -111,6 +116,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
           payer_name: payerName.trim(),
           amount: customAmount ? Number(customAmount) : (data?.amount || 0),
           payment_method: provider === 'mobile' ? 'Mobile Money' : provider === 'bank' ? 'Bank' : 'Card',
+          is_anonymous: isAnonymous,
         }),
       });
 
@@ -206,17 +212,23 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
             <div className="p-4 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-[#00E599] uppercase tracking-wider">
-                  {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'Fundraiser Target' : 'Amount Due'}
+                  {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' || data.type === 'CHARITY' || data.type === 'SAVINGS' ? 'Fundraiser Target' : 'Amount Due'}
                 </span>
                 <h3 className="text-2xl font-black text-white">{formatMoney(data.amount)}</h3>
-                {(data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO') && (
+                {(data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' || data.type === 'CHARITY' || data.type === 'SAVINGS') && (
                   <p className="text-[11px] font-semibold text-white/60 mt-0.5">
                     Collected: {formatMoney(data.collectedAmount || 0)}
                   </p>
                 )}
               </div>
-              <span className="text-xs font-semibold text-[#00E599] bg-[#00E599]/10 border border-[#00E599]/20 px-3 py-1 rounded-xl">
-                {data.type === 'BIRTHDAY_POOL' ? 'Birthday Gift' : data.type === 'MCHANGO' ? 'Michango' : 'Verified Link'}
+              <span className={`text-xs font-semibold px-3 py-1 rounded-xl border ${
+                data.type === 'CHARITY'
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                  : data.type === 'SAVINGS'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  : 'text-[#00E599] bg-[#00E599]/10 border-[#00E599]/20'
+              }`}>
+                {data.type === 'BIRTHDAY_POOL' ? 'Birthday Gift' : data.type === 'CHARITY' ? 'Charity Cause' : data.type === 'SAVINGS' ? 'Savings Goal' : data.type === 'MCHANGO' ? 'Michango' : 'Verified Link'}
               </span>
             </div>
           </div>
@@ -356,18 +368,32 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
                   <div>
                     <label className="text-xs font-bold text-white/80 mb-1 block">
-                      {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'Your Contribution (TZS)' : 'Amount to Pay (TZS)'}
+                      {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' || data.type === 'CHARITY' || data.type === 'SAVINGS' ? 'Your Contribution (TZS)' : 'Amount to Pay (TZS)'}
                     </label>
                     <input
                       type="number"
                       inputMode="decimal"
                       value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
-                      placeholder={data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'e.g. 20000' : String(data.amount)}
+                      placeholder={data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' || data.type === 'CHARITY' || data.type === 'SAVINGS' ? 'e.g. 20000' : String(data.amount)}
                       required
                       className="w-full px-4 py-3 bg-[#081214] rounded-2xl border border-white/10 focus:border-[#00E599] focus:outline-none font-black text-lg text-white placeholder-white/30"
                     />
                   </div>
+
+                  {(data.type === 'CHARITY' || data.type === 'MCHANGO' || data.type === 'BIRTHDAY_POOL') && (
+                    <label className="flex items-center space-x-2.5 cursor-pointer pt-1 px-1">
+                      <input
+                        type="checkbox"
+                        checked={isAnonymous}
+                        onChange={(e) => setIsAnonymous(e.target.checked)}
+                        className="w-4 h-4 rounded border-white/20 text-[#00E599] focus:ring-0 bg-[#081214]"
+                      />
+                      <span className="text-xs text-white/70 select-none">
+                        Make my contribution anonymous on the public donor list
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
 
