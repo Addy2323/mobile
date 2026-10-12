@@ -13,11 +13,12 @@ interface FriendPaymentScreenProps {
 type PaymentStep = 'loading' | 'error' | 'method' | 'phone' | 'waiting' | 'success';
 
 export interface PublicPaymentData {
-  type: 'PAYMENT_LINK' | 'SPLIT';
+  type: 'PAYMENT_LINK' | 'SPLIT' | 'BIRTHDAY_POOL' | 'MCHANGO';
   id: string;
   token: string;
   title: string;
   amount: number;
+  collectedAmount?: number;
   currency: string;
   status: string;
   expirationMode?: string;
@@ -63,7 +64,9 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
       const linkData: PublicPaymentData = await res.json();
       setData(linkData);
-      if (linkData.amount) {
+      if (linkData.type === 'BIRTHDAY_POOL' || linkData.type === 'MCHANGO') {
+        setCustomAmount('');
+      } else if (linkData.amount) {
         setCustomAmount(String(linkData.amount));
       }
       setStep('method');
@@ -202,11 +205,18 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
             <div className="p-4 bg-[#081214] rounded-2xl border border-white/10 flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-[#00E599] uppercase tracking-wider">Amount Due</span>
+                <span className="text-xs font-bold text-[#00E599] uppercase tracking-wider">
+                  {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'Fundraiser Target' : 'Amount Due'}
+                </span>
                 <h3 className="text-2xl font-black text-white">{formatMoney(data.amount)}</h3>
+                {(data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO') && (
+                  <p className="text-[11px] font-semibold text-white/60 mt-0.5">
+                    Collected: {formatMoney(data.collectedAmount || 0)}
+                  </p>
+                )}
               </div>
               <span className="text-xs font-semibold text-[#00E599] bg-[#00E599]/10 border border-[#00E599]/20 px-3 py-1 rounded-xl">
-                Verified Link
+                {data.type === 'BIRTHDAY_POOL' ? 'Birthday Gift' : data.type === 'MCHANGO' ? 'Michango' : 'Verified Link'}
               </span>
             </div>
           </div>
@@ -345,12 +355,15 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-white/80 mb-1 block">Amount to Pay (TZS)</label>
+                    <label className="text-xs font-bold text-white/80 mb-1 block">
+                      {data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'Your Contribution (TZS)' : 'Amount to Pay (TZS)'}
+                    </label>
                     <input
                       type="number"
                       inputMode="decimal"
-                      value={customAmount || data.amount}
+                      value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder={data.type === 'BIRTHDAY_POOL' || data.type === 'MCHANGO' ? 'e.g. 20000' : String(data.amount)}
                       required
                       className="w-full px-4 py-3 bg-[#081214] rounded-2xl border border-white/10 focus:border-[#00E599] focus:outline-none font-black text-lg text-white placeholder-white/30"
                     />
@@ -360,10 +373,10 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!customAmount && !data.amount)}
                 className="w-full py-4 bg-gradient-to-r from-[#00E599] to-[#00C880] hover:brightness-105 active:scale-[0.98] text-[#060D0E] font-black rounded-2xl shadow-lg shadow-[#00E599]/20 transition-all disabled:opacity-50"
               >
-                {loading ? 'Processing...' : `Confirm & Pay ${formatMoney(Number(customAmount || data.amount))}`}
+                {loading ? 'Processing...' : `Confirm & Pay ${formatMoney(Number(customAmount || data.amount || 0))}`}
               </button>
             </form>
           )}

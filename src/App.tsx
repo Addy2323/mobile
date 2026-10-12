@@ -97,9 +97,10 @@ export default function App() {
 
   if (publicToken) {
     return (
-      /^PL-/i.test(publicToken)
-        ? <FriendPaymentScreen token={publicToken} onBackToSplit={() => { window.location.href = '/'; }} />
-        : <FriendPaymentView token={publicToken} />
+      <FriendPaymentScreen
+        token={publicToken}
+        onBackToSplit={() => { window.location.href = '/'; }}
+      />
     );
   }
 

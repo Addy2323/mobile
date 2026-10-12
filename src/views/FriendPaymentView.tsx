@@ -52,7 +52,17 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       .eq('ref_code', token.toUpperCase())
       .maybeSingle();
 
-    if (!splitData) { setStage('not_found'); return; }
+    if (!splitData) {
+      try {
+        const pubRes = await fetch(`/api/public/payment-links/${encodeURIComponent(token)}`);
+        if (pubRes.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch {}
+      setStage('not_found');
+      return;
+    }
     const s = splitData as Split;
     setSplit(s);
 

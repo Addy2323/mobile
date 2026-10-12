@@ -14,11 +14,23 @@ interface MichangoScreenProps {
 export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language }) => {
   const [activeTab, setActiveTab] = useState<'tracker' | 'create'>('create');
 
-  const [title, setTitle] = useState('Harusi ya Baraka & Mary');
+  const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Harusi');
-  const [targetAmount, setTargetAmount] = useState('2000000');
-  const [suggestedPledge, setSuggestedPledge] = useState('100000');
-  const [organizer, setOrganizer] = useState('Given Mhema');
+  const [targetAmount, setTargetAmount] = useState('');
+  const [suggestedPledge, setSuggestedPledge] = useState('');
+  const [organizer, setOrganizer] = useState(() => {
+    try {
+      const uStr = localStorage.getItem('lumo_user');
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u?.full_name?.trim()) return u.full_name.trim();
+        if (u?.name?.trim()) return u.name.trim();
+      }
+      const raw = localStorage.getItem('lumo_user_name');
+      if (raw && !raw.startsWith('user_') && !/\d/.test(raw)) return raw.trim();
+    } catch {}
+    return '';
+  });
 
   const [useCustomDestination, setUseCustomDestination] = useState(false);
   const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
@@ -53,7 +65,11 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
         if (data.length > 0) {
           const active = data[0];
           setCurrentEvent(active);
-          fetchContributors(`MCHANG-${active.id.slice(0, 6)}`);
+          const linkToken = `MCHANG-${active.id.slice(0, 6)}`;
+          setGeneratedLink(`${window.location.origin}/s/${linkToken}`);
+          fetchContributors(linkToken);
+        } else {
+          setCurrentEvent(null);
         }
       }
     } catch (err) {
@@ -248,29 +264,53 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
             <span>{isSubmitting ? 'Launching...' : 'Launch Campaign & Share'}</span>
           </button>
         </form>
+      ) : loadingEvents ? (
+        <div className="flex flex-col items-center justify-center py-16 space-y-3">
+          <RefreshCw className="w-8 h-8 text-[#00E599] animate-spin" />
+          <p className="text-xs font-bold text-white/60">Loading michango campaigns...</p>
+        </div>
+      ) : !currentEvent ? (
+        <div className="bg-[#0C181A] p-8 rounded-3xl border border-white/10 text-center space-y-4 my-8 shadow-xl">
+          <div className="w-16 h-16 bg-[#00E599]/15 text-[#00E599] rounded-2xl flex items-center justify-center mx-auto">
+            <HeartHandshake className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-white">No Active Michango Campaigns</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+              You haven't launched any community fundraisers or michango campaigns yet. Launch one to collect pledges transparently.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('create')}
+            className="py-3 px-6 bg-gradient-to-r from-[#00E599] to-[#00C880] text-[#060D0E] font-black rounded-2xl text-xs hover:brightness-105 active:scale-95 transition-all inline-flex items-center space-x-2 shadow-lg shadow-[#00E599]/20"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>+ Launch Campaign</span>
+          </button>
+        </div>
       ) : (
         /* ACTIVE CAMPAIGN TRACKER VIEW */
         <div className="space-y-4">
           <div className="bg-[#0C181A] border border-[#00E599]/30 text-white p-6 rounded-3xl shadow-xl space-y-4">
             <div className="flex items-center space-x-2 bg-[#00E599]/15 border border-[#00E599]/30 px-3 py-1 rounded-full text-xs font-bold w-fit text-[#00E599]">
               <HeartHandshake className="w-3.5 h-3.5" />
-              <span>{category} Fundraiser</span>
+              <span>{currentEvent.event_type || category} Fundraiser</span>
             </div>
 
             <div>
-              <h3 className="text-2xl font-black text-white">{currentEvent?.title || title}</h3>
-              <p className="text-white/70 text-xs mt-0.5">Target: {formatMoney(Number(currentEvent?.target_amount || totalTarget))}</p>
+              <h3 className="text-2xl font-black text-white">{currentEvent.title}</h3>
+              <p className="text-white/70 text-xs mt-0.5">Target: {formatMoney(Number(currentEvent.target_amount || 0))}</p>
             </div>
 
             <div className="space-y-1.5 pt-2">
               <div className="flex justify-between items-center text-xs font-bold text-white/80">
-                <span>Collected: {formatMoney(Number(currentEvent?.collected_amount || 0))}</span>
+                <span>Collected: {formatMoney(Number(currentEvent.collected_amount || 0))}</span>
                 <span>
                   {Math.min(
                     100,
                     Math.round(
-                      ((Number(currentEvent?.collected_amount || 0)) /
-                        (Number(currentEvent?.target_amount || totalTarget) || 1)) *
+                      ((Number(currentEvent.collected_amount || 0)) /
+                        (Number(currentEvent.target_amount) || 1)) *
                         100
                     )
                   )}
@@ -281,8 +321,8 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
                 percent={Math.min(
                   100,
                   Math.round(
-                    ((Number(currentEvent?.collected_amount || 0)) /
-                      (Number(currentEvent?.target_amount || totalTarget) || 1)) *
+                    ((Number(currentEvent.collected_amount || 0)) /
+                      (Number(currentEvent.target_amount) || 1)) *
                       100
                   )
                 )}
@@ -295,7 +335,7 @@ export const MichangoScreen: React.FC<MichangoScreenProps> = ({ onBack, language
             
             <div className="grid grid-cols-2 gap-2">
               <a
-                href={`https://wa.me/?text=${encodeURIComponent(`Changia ${title} via LUMO Split: ${generatedLink || window.location.href}`)}`}
+                href={`https://wa.me/?text=${encodeURIComponent(`Changia ${currentEvent.title} via LUMO Split: ${generatedLink || `${window.location.origin}/s/MCHANG-${currentEvent.id.slice(0, 6)}`}`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"

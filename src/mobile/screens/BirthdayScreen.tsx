@@ -14,9 +14,9 @@ interface BirthdayScreenProps {
 export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language }) => {
   const [activeTab, setActiveTab] = useState<'tracker' | 'create'>('create');
 
-  const [recipient, setRecipient] = useState('Kelvin');
-  const [giftTitle, setGiftTitle] = useState('PlayStation 5 Controller & Gift Box');
-  const [targetAmount, setTargetAmount] = useState('300000');
+  const [recipient, setRecipient] = useState('');
+  const [giftTitle, setGiftTitle] = useState('');
+  const [targetAmount, setTargetAmount] = useState('');
   const [hideFromRecipient, setHideFromRecipient] = useState(true);
   const [useCustomDestination, setUseCustomDestination] = useState(false);
   const [destination, setDestination] = useState<PaymentDestinationConfig | null>(null);
@@ -43,7 +43,11 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
         if (data.length > 0) {
           const active = data[0];
           setCurrentPool(active);
-          fetchContributors(`BDAY-${active.id.slice(0, 6)}`);
+          const linkToken = `BDAY-${active.id.slice(0, 6)}`;
+          setGeneratedLink(`${window.location.origin}/s/${linkToken}`);
+          fetchContributors(linkToken);
+        } else {
+          setCurrentPool(null);
         }
       }
     } catch (err) {
@@ -234,6 +238,30 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
             <span>{isSubmitting ? 'Creating Pool...' : 'Create Birthday Split & Share'}</span>
           </button>
         </form>
+      ) : loadingPools ? (
+        <div className="flex flex-col items-center justify-center py-16 space-y-3">
+          <RefreshCw className="w-8 h-8 text-[#00E599] animate-spin" />
+          <p className="text-xs font-bold text-white/60">Loading birthday gift splits...</p>
+        </div>
+      ) : !currentPool ? (
+        <div className="bg-[#0C181A] p-8 rounded-3xl border border-white/10 text-center space-y-4 my-8 shadow-xl">
+          <div className="w-16 h-16 bg-[#00E599]/15 text-[#00E599] rounded-2xl flex items-center justify-center mx-auto">
+            <Gift className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-white">No Active Birthday Splits</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+              You haven't created any group birthday gift splits yet. Create one to invite friends and track contributions in real time.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('create')}
+            className="py-3 px-6 bg-gradient-to-r from-[#00E599] to-[#00C880] text-[#060D0E] font-black rounded-2xl text-xs hover:brightness-105 active:scale-95 transition-all inline-flex items-center space-x-2 shadow-lg shadow-[#00E599]/20"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>+ Create Gift Split</span>
+          </button>
+        </div>
       ) : (
         /* ACTIVE TRACKER VIEW */
         <div className="space-y-4">
@@ -241,18 +269,36 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
             <div className="relative z-10 space-y-2">
               <div className="inline-flex items-center px-3 py-1 bg-[#00E599]/15 border border-[#00E599]/30 rounded-full text-xs font-bold space-x-1.5 text-[#00E599]">
                 <Heart className="w-3.5 h-3.5 fill-[#00E599]" />
-                <span>{hideFromRecipient ? 'Secret Surprise Gift' : 'Open Birthday Gift'}</span>
+                <span>Group Birthday Gift</span>
               </div>
 
-              <h3 className="text-2xl font-black tracking-tight text-white">{recipient}'s Birthday Split 🎉</h3>
-              <p className="text-white/70 text-xs">{giftTitle}</p>
+              <h3 className="text-2xl font-black tracking-tight text-white">{currentPool.birthday_person}'s Birthday Split 🎉</h3>
+              <p className="text-white/70 text-xs">{currentPool.message || 'Birthday Gift Fund'}</p>
 
               <div className="pt-3">
                 <div className="flex justify-between items-center text-xs font-bold mb-1 text-white/80">
-                  <span>Goal: {formatMoney(parseFloat(targetAmount) || 300000)}</span>
-                  <span>0% Collected</span>
+                  <span>Goal: {formatMoney(Number(currentPool.target_amount || 0))}</span>
+                  <span>
+                    {Math.min(
+                      100,
+                      Math.round(
+                        ((Number(currentPool.collected_amount || 0)) /
+                          (Number(currentPool.target_amount) || 1)) *
+                          100
+                      )
+                    )}% Collected ({formatMoney(Number(currentPool.collected_amount || 0))})
+                  </span>
                 </div>
-                <ProgressBar percent={0} />
+                <ProgressBar
+                  percent={Math.min(
+                    100,
+                    Math.round(
+                      ((Number(currentPool.collected_amount || 0)) /
+                        (Number(currentPool.target_amount) || 1)) *
+                        100
+                    )
+                  )}
+                />
               </div>
             </div>
           </div>
@@ -262,7 +308,7 @@ export const BirthdayScreen: React.FC<BirthdayScreenProps> = ({ onBack, language
             
             <div className="grid grid-cols-2 gap-2">
               <a
-                href={`https://wa.me/?text=${encodeURIComponent(`Contribute to ${recipient}'s Birthday Gift (${giftTitle}): ${generatedLink || window.location.href}`)}`}
+                href={`https://wa.me/?text=${encodeURIComponent(`Contribute to ${currentPool.birthday_person}'s Birthday Gift (${currentPool.message || 'Gift Pool'}): ${generatedLink || `${window.location.origin}/s/BDAY-${currentPool.id.slice(0, 6)}`}`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-2xl shadow flex items-center justify-center space-x-1.5 text-xs transition-colors"
