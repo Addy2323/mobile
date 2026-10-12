@@ -387,18 +387,67 @@ export function createAdminRouter(pool) {
   router.get('/settlements', requirePermission('settlements.view'), async (req, res) => {
     try {
       const { status, limit = 50, offset = 0 } = req.query;
-      let sql = 'SELECT * FROM payout_records WHERE 1=1';
+      let sql = `
+        SELECT 
+          s.id,
+          s.payment_id,
+          s.split_participant_id,
+          s.split_id,
+          s.destination_snapshot,
+          s.provider,
+          s.provider_reference,
+          s.amount,
+          s.currency,
+          s.status,
+          s.attempt_count,
+          s.failure_code,
+          s.failure_reason,
+          s.initiated_at,
+          s.completed_at,
+          s.created_at,
+          s.updated_at,
+          sp.title AS split_title,
+          sp.organizer_name,
+          sp.organizer_phone
+        FROM settlements s
+        LEFT JOIN splits sp ON (s.split_id = sp.id::text OR s.split_id = sp.ref_code)
+        WHERE 1=1
+      `;
       const params = [];
 
       if (status) {
         params.push(status);
-        sql += ` AND status = $${params.length}`;
+        sql += ` AND s.status = $${params.length}`;
       }
 
-      sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+      sql += ' ORDER BY s.created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
       params.push(parseInt(limit), parseInt(offset));
 
       const { rows } = await pool.query(sql, params);
+
+      // If settlements table is currently empty, query payout_records for backwards compatibility
+      if (rows.length === 0 && !status) {
+        const legacyRes = await pool.query(
+          `SELECT 
+            p.id,
+            p.split_id,
+            p.amount,
+            p.fee,
+            p.channel,
+            p.recipient_reference,
+            p.provider_payout_id AS provider_reference,
+            p.status,
+            p.created_at,
+            sp.title AS split_title,
+            sp.organizer_name
+          FROM payout_records p
+          LEFT JOIN splits sp ON p.split_id = sp.id
+          ORDER BY p.created_at DESC LIMIT $1 OFFSET $2`,
+          [parseInt(limit), parseInt(offset)]
+        );
+        return res.json(legacyRes.rows);
+      }
+
       res.json(rows);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -408,19 +457,33 @@ export function createAdminRouter(pool) {
   router.post('/settlements/:id/retry', requirePermission('settlements.retry'), async (req, res) => {
     try {
       const settlementId = req.params.id;
-      const sRes = await pool.query('SELECT * FROM payout_records WHERE id = $1', [settlementId]);
+      const sRes = await pool.query('SELECT * FROM settlements WHERE id = $1', [settlementId]);
+      
       if (sRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Settlement record not found' });
+        // Fallback to payout_records if it was a legacy payout record
+        const pRes = await pool.query('SELECT * FROM payout_records WHERE id = $1', [settlementId]);
+        if (pRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Settlement record not found' });
+        }
+        const legacy = pRes.rows[0];
+        if (legacy.status === 'SETTLED' || legacy.status === 'COMPLETED') {
+          return res.status(400).json({ error: 'Settlement has already completed. Duplicate payout prevented.' });
+        }
+        await pool.query(
+          "UPDATE payout_records SET status = 'PROCESSING' WHERE id = $1",
+          [settlementId]
+        );
+        return res.json({ message: 'Settlement retry queued with idempotency check', settlementId });
       }
 
       const settlement = sRes.rows[0];
-      if (settlement.status === 'SETTLED') {
+      if (settlement.status === 'SETTLED' || settlement.status === 'COMPLETED') {
         return res.status(400).json({ error: 'Settlement has already completed. Duplicate payout prevented.' });
       }
 
       // Idempotently update retry status
       await pool.query(
-        "UPDATE payout_records SET status = 'PROCESSING', updated_at = NOW() WHERE id = $1",
+        "UPDATE settlements SET status = 'PROCESSING', attempt_count = COALESCE(attempt_count, 0) + 1, updated_at = NOW() WHERE id = $1",
         [settlementId]
       );
 
@@ -454,7 +517,7 @@ export function createAdminRouter(pool) {
           u.phone AS user_phone,
           u.email AS user_email
         FROM withdrawal_requests w
-        LEFT JOIN users u ON w.user_id = u.id
+        LEFT JOIN users u ON w.user_id::text = u.id::text
         WHERE 1=1
       `;
       const params = [];
@@ -653,19 +716,44 @@ export function createAdminRouter(pool) {
   router.get('/payment-links', requirePermission('payment_links.view'), async (req, res) => {
     try {
       const { query, limit = 50, offset = 0 } = req.query;
-      let sql = 'SELECT * FROM payment_links WHERE 1=1';
+      let sql = `
+        SELECT 
+          pl.*,
+          u.name AS creator_name,
+          u.phone AS creator_phone,
+          COALESCE((
+            SELECT COUNT(*) FROM payment_attempts pa 
+            WHERE (pa.resource_type = 'payment_link' OR pa.application_id = 'payment_link') 
+              AND pa.resource_id = pl.id::text 
+              AND pa.status = 'COMPLETED'
+          ), 0) AS contributions_count,
+          COALESCE((
+            SELECT SUM(amount) FROM payment_attempts pa 
+            WHERE (pa.resource_type = 'payment_link' OR pa.application_id = 'payment_link') 
+              AND pa.resource_id = pl.id::text 
+              AND pa.status = 'COMPLETED'
+          ), 0) AS collected_amount
+        FROM payment_links pl
+        LEFT JOIN users u ON pl.owner_user_id::text = u.id::text
+        WHERE 1=1
+      `;
       const params = [];
 
       if (query) {
         params.push(`%${query}%`);
-        sql += ` AND (title ILIKE $${params.length} OR public_token ILIKE $${params.length})`;
+        sql += ` AND (pl.title ILIKE $${params.length} OR pl.public_token ILIKE $${params.length} OR u.phone ILIKE $${params.length} OR u.name ILIKE $${params.length})`;
       }
 
-      sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+      sql += ' ORDER BY pl.created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
       params.push(parseInt(limit), parseInt(offset));
 
       const { rows } = await pool.query(sql, params);
-      res.json(rows);
+      res.json(rows.map(r => ({
+        ...r,
+        amount: Number(r.amount),
+        collected_amount: Number(r.collected_amount || 0),
+        contributions_count: Number(r.contributions_count || 0)
+      })));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -675,7 +763,7 @@ export function createAdminRouter(pool) {
     try {
       const linkId = req.params.id;
       const { rows } = await pool.query(
-        "UPDATE payment_links SET status = 'REVOKED' WHERE id = $1 RETURNING *",
+        "UPDATE payment_links SET status = 'REVOKED', updated_at = NOW() WHERE id = $1 RETURNING *",
         [linkId]
       );
 
@@ -704,7 +792,18 @@ export function createAdminRouter(pool) {
   // -------------------------------------------------------------
   router.get('/destinations', requirePermission('destinations.view'), async (req, res) => {
     try {
-      const { rows } = await pool.query('SELECT * FROM payment_destinations ORDER BY created_at DESC LIMIT 100');
+      const { limit = 50, offset = 0 } = req.query;
+      const { rows } = await pool.query(`
+        SELECT 
+          pd.*,
+          u.name AS owner_name,
+          u.phone AS owner_phone,
+          u.email AS owner_email
+        FROM payment_destinations pd
+        LEFT JOIN users u ON pd.owner_user_id::text = u.id::text
+        ORDER BY pd.created_at DESC 
+        LIMIT $1 OFFSET $2
+      `, [parseInt(limit), parseInt(offset)]);
       res.json(rows);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -715,7 +814,7 @@ export function createAdminRouter(pool) {
     try {
       const destId = req.params.id;
       const { rows } = await pool.query(
-        "UPDATE payment_destinations SET is_verified = true, updated_at = NOW() WHERE id = $1 RETURNING *",
+        "UPDATE payment_destinations SET is_verified = true, verification_status = 'VERIFIED', updated_at = NOW() WHERE id = $1 RETURNING *",
         [destId]
       );
 
@@ -729,10 +828,40 @@ export function createAdminRouter(pool) {
         action: 'DESTINATION_VERIFIED',
         resourceType: 'destination',
         resourceId: destId,
+        afterState: { is_verified: true, verification_status: 'VERIFIED' },
         ipAddress: req.ip
       });
 
       res.json({ message: 'Destination verified', destination: rows[0] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.patch('/destinations/:id/toggle-status', requirePermission('destinations.verify'), async (req, res) => {
+    try {
+      const destId = req.params.id;
+      const current = await pool.query('SELECT status FROM payment_destinations WHERE id = $1', [destId]);
+      if (current.rows.length === 0) {
+        return res.status(404).json({ error: 'Destination not found' });
+      }
+      const nextStatus = current.rows[0].status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const { rows } = await pool.query(
+        'UPDATE payment_destinations SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+        [nextStatus, destId]
+      );
+
+      await logAdminAuditAction(pool, {
+        adminUserId: req.adminUser.id,
+        adminEmail: req.adminUser.email,
+        action: 'DESTINATION_STATUS_TOGGLED',
+        resourceType: 'destination',
+        resourceId: destId,
+        afterState: { status: nextStatus },
+        ipAddress: req.ip
+      });
+
+      res.json({ message: `Destination status updated to ${nextStatus}`, destination: rows[0] });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -743,8 +872,35 @@ export function createAdminRouter(pool) {
   // -------------------------------------------------------------
   router.get('/pools', requirePermission('pools.view'), async (req, res) => {
     try {
-      const { rows } = await pool.query("SELECT * FROM splits WHERE split_type = 'BIRTHDAY_POOL' ORDER BY created_at DESC");
-      res.json(rows);
+      const { limit = 50, offset = 0 } = req.query;
+      const { rows } = await pool.query(`
+        SELECT 
+          bp.id,
+          bp.birthday_person AS title,
+          bp.birthday_person,
+          bp.message,
+          bp.target_amount,
+          bp.collected_amount,
+          bp.currency,
+          bp.status,
+          bp.destination_id,
+          bp.destination_snapshot,
+          bp.created_at,
+          bp.updated_at,
+          u.name AS creator_name,
+          u.phone AS creator_phone
+        FROM birthday_pools bp
+        LEFT JOIN users u ON bp.owner_user_id::text = u.id::text
+        ORDER BY bp.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [parseInt(limit), parseInt(offset)]);
+
+      res.json(rows.map(r => ({
+        ...r,
+        target_amount: Number(r.target_amount || 0),
+        collected_amount: Number(r.collected_amount || 0),
+        total_amount: Number(r.target_amount || 0)
+      })));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -752,8 +908,35 @@ export function createAdminRouter(pool) {
 
   router.get('/michango', requirePermission('michango.view'), async (req, res) => {
     try {
-      const { rows } = await pool.query("SELECT * FROM splits WHERE split_type = 'MICHANGO' ORDER BY created_at DESC");
-      res.json(rows);
+      const { limit = 50, offset = 0 } = req.query;
+      const { rows } = await pool.query(`
+        SELECT 
+          me.id,
+          me.title,
+          me.event_type,
+          me.description,
+          me.target_amount,
+          me.collected_amount,
+          me.currency,
+          me.status,
+          me.destination_id,
+          me.destination_snapshot,
+          me.created_at,
+          me.updated_at,
+          u.name AS creator_name,
+          u.phone AS creator_phone
+        FROM michango_events me
+        LEFT JOIN users u ON me.owner_user_id::text = u.id::text
+        ORDER BY me.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [parseInt(limit), parseInt(offset)]);
+
+      res.json(rows.map(r => ({
+        ...r,
+        target_amount: Number(r.target_amount || 0),
+        collected_amount: Number(r.collected_amount || 0),
+        total_amount: Number(r.target_amount || 0)
+      })));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -761,8 +944,37 @@ export function createAdminRouter(pool) {
 
   router.get('/bills', requirePermission('bills.view'), async (req, res) => {
     try {
-      const { rows } = await pool.query("SELECT * FROM splits WHERE split_type = 'PAY_BILLS' ORDER BY created_at DESC");
-      res.json(rows);
+      const { limit = 50, offset = 0 } = req.query;
+      const { rows } = await pool.query(`
+        SELECT 
+          hc.id,
+          hc.purpose AS title,
+          hc.bill_provider,
+          hc.biller_control_number,
+          hc.amount_per_member,
+          hc.target_members,
+          hc.total_target_amount AS total_amount,
+          hc.collected_amount,
+          hc.currency,
+          hc.contribution_status AS status,
+          hc.bill_payment_status,
+          hc.provider_tx_ref,
+          hc.created_at,
+          hc.updated_at,
+          u.name AS creator_name,
+          u.phone AS creator_phone
+        FROM house_contributions hc
+        LEFT JOIN users u ON hc.owner_user_id::text = u.id::text
+        ORDER BY hc.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [parseInt(limit), parseInt(offset)]);
+
+      res.json(rows.map(r => ({
+        ...r,
+        total_amount: Number(r.total_amount || 0),
+        collected_amount: Number(r.collected_amount || 0),
+        amount_per_member: Number(r.amount_per_member || 0)
+      })));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -773,7 +985,7 @@ export function createAdminRouter(pool) {
   // -------------------------------------------------------------
   router.get('/support/tickets', requirePermission('support.view'), async (req, res) => {
     try {
-      const { status, limit = 50, offset = 0 } = req.query;
+      const { status, limit = 50, offset = 0, query } = req.query;
       let sql = 'SELECT * FROM support_tickets WHERE 1=1';
       const params = [];
 
@@ -782,11 +994,75 @@ export function createAdminRouter(pool) {
         sql += ` AND status = $${params.length}`;
       }
 
+      if (query) {
+        params.push(`%${query}%`);
+        sql += ` AND (ticket_number ILIKE $${params.length} OR user_name ILIKE $${params.length} OR user_phone ILIKE $${params.length} OR title ILIKE $${params.length})`;
+      }
+
       sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
       params.push(parseInt(limit), parseInt(offset));
 
       const { rows } = await pool.query(sql, params);
       res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/support/tickets/:id', requirePermission('support.view'), async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const tRes = await pool.query('SELECT * FROM support_tickets WHERE id = $1', [ticketId]);
+      if (tRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Support ticket not found' });
+      }
+      const ticket = tRes.rows[0];
+      const notesRes = await pool.query(
+        'SELECT * FROM support_notes WHERE ticket_id = $1 ORDER BY created_at ASC',
+        [ticketId]
+      );
+      res.json({
+        ...ticket,
+        notes: notesRes.rows
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.patch('/support/tickets/:id/status', requirePermission('support.manage'), async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const { status, assignedAdminId } = req.body;
+      const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ error: 'Invalid status. Must be OPEN, IN_PROGRESS, RESOLVED, or CLOSED.' });
+      }
+
+      const { rows } = await pool.query(
+        `UPDATE support_tickets 
+         SET status = $1, 
+             assigned_admin_id = COALESCE($2, assigned_admin_id),
+             updated_at = NOW() 
+         WHERE id = $3 RETURNING *`,
+        [status, assignedAdminId || null, ticketId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Support ticket not found' });
+      }
+
+      await logAdminAuditAction(pool, {
+        adminUserId: req.adminUser.id,
+        adminEmail: req.adminUser.email,
+        action: 'SUPPORT_TICKET_STATUS_UPDATED',
+        resourceType: 'support_ticket',
+        resourceId: ticketId,
+        afterState: { status },
+        ipAddress: req.ip
+      });
+
+      res.json({ message: 'Ticket status updated', ticket: rows[0] });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -813,17 +1089,22 @@ export function createAdminRouter(pool) {
     try {
       const ticketId = req.params.id;
       const { note, isInternal = true } = req.body;
-      if (!note) {
+      if (!note || !note.trim()) {
         return res.status(400).json({ error: 'Note text required' });
       }
 
       const { rows } = await pool.query(
         `INSERT INTO support_notes (ticket_id, admin_user_id, admin_name, is_internal, note)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [ticketId, req.adminUser.id, req.adminUser.fullName, isInternal, note]
+        [ticketId, req.adminUser.id, req.adminUser.fullName || req.adminUser.email, isInternal, note.trim()]
       );
 
-      res.status(201).json(rows[0]);
+      const allNotes = await pool.query(
+        'SELECT * FROM support_notes WHERE ticket_id = $1 ORDER BY created_at ASC',
+        [ticketId]
+      );
+
+      res.status(201).json({ note: rows[0], notes: allNotes.rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -834,27 +1115,136 @@ export function createAdminRouter(pool) {
   // -------------------------------------------------------------
   router.get('/reconciliation', requirePermission('reports.view'), async (req, res) => {
     try {
-      // Find discrepancies (e.g. payment intents without payout records or status mismatch)
-      const { rows } = await pool.query(`
+      // Check 1: Payments marked completed without matching successful settlement
+      const paymentDiscrepancies = await pool.query(`
         SELECT 
           p.id AS payment_id,
-          p.merchant_reference,
-          p.provider_reference,
+          p.provider_tx_ref,
           p.amount,
           p.status AS payment_status,
-          po.id AS payout_id,
-          po.status AS payout_status,
+          s.id AS settlement_id,
+          s.status AS settlement_status,
           p.created_at
         FROM payment_attempts p
-        LEFT JOIN payout_records po ON p.merchant_reference = po.reference
-        WHERE p.status = 'COMPLETED' AND (po.status IS NULL OR po.status = 'FAILED')
+        LEFT JOIN settlements s ON (p.provider_tx_ref = s.provider_reference OR p.id::text = s.payment_id::text)
+        WHERE p.status = 'COMPLETED' AND (s.status IS NULL OR s.status = 'FAILED')
         ORDER BY p.created_at DESC
-        LIMIT 50
+        LIMIT 25
       `);
 
+      // Check 2: Withdrawals in PENDING_REVIEW vs user reserved balance
+      const withdrawalReservationAudit = await pool.query(`
+        SELECT 
+          w.id AS withdrawal_id,
+          w.reference_code,
+          w.user_id,
+          w.amount AS withdrawal_amount,
+          w.status AS withdrawal_status,
+          ub.available_balance,
+          ub.reserved_balance,
+          w.created_at
+        FROM withdrawal_requests w
+        LEFT JOIN user_balances ub ON w.user_id::text = ub.user_id::text
+        WHERE w.status = 'PENDING_REVIEW' AND (ub.reserved_balance IS NULL OR ub.reserved_balance < w.amount)
+        LIMIT 25
+      `);
+
+      // Check 3: Users whose ledger invariants are inconsistent
+      const ledgerInvariants = await pool.query(`
+        SELECT 
+          ub.user_id,
+          ub.available_balance,
+          ub.reserved_balance,
+          ub.pending_balance,
+          (ub.available_balance + ub.reserved_balance + ub.pending_balance) AS total_sum
+        FROM user_balances ub
+        WHERE (ub.available_balance < 0 OR ub.reserved_balance < 0)
+        LIMIT 25
+      `);
+
+      const totalDiscrepancies = 
+        paymentDiscrepancies.rows.length + 
+        withdrawalReservationAudit.rows.length + 
+        ledgerInvariants.rows.length;
+
       res.json({
-        discrepancyCount: rows.length,
-        items: rows
+        discrepancyCount: totalDiscrepancies,
+        items: paymentDiscrepancies.rows,
+        reservationAnomalies: withdrawalReservationAudit.rows,
+        ledgerAnomalies: ledgerInvariants.rows,
+        summary: {
+          paymentDiscrepancies: paymentDiscrepancies.rows.length,
+          reservationAnomalies: withdrawalReservationAudit.rows.length,
+          ledgerAnomalies: ledgerInvariants.rows.length
+        },
+        auditTimestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // FINANCIAL REPORTS & SUMMARY
+  // -------------------------------------------------------------
+  router.get('/reports/summary', requirePermission('reports.view'), async (req, res) => {
+    try {
+      const { timeframe = '30d' } = req.query;
+      let days = 30;
+      if (timeframe === '7d') days = 7;
+      if (timeframe === '90d') days = 90;
+      if (timeframe === 'all') days = 3650;
+
+      const dateLimit = new Date();
+      dateLimit.setDate(dateLimit.getDate() - days);
+
+      // Volume & payment stats
+      const payStats = await pool.query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed_payments,
+          COUNT(*) FILTER (WHERE status = 'FAILED') AS failed_payments,
+          COALESCE(SUM(amount) FILTER (WHERE status = 'COMPLETED'), 0) AS total_volume
+        FROM payment_attempts
+        WHERE created_at >= $1
+      `, [dateLimit]);
+
+      // Withdrawal stats
+      const wthStats = await pool.query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE status IN ('APPROVED', 'COMPLETED')) AS completed_withdrawals,
+          COUNT(*) FILTER (WHERE status = 'PENDING_REVIEW') AS pending_withdrawals,
+          COALESCE(SUM(amount) FILTER (WHERE status IN ('APPROVED', 'COMPLETED')), 0) AS gross_withdrawals,
+          COALESCE(SUM(fee) FILTER (WHERE status IN ('APPROVED', 'COMPLETED')), 0) AS total_withdrawal_fees,
+          COALESCE(SUM(net_amount) FILTER (WHERE status IN ('APPROVED', 'COMPLETED')), 0) AS net_payouts_disbursed
+        FROM withdrawal_requests
+        WHERE created_at >= $1
+      `, [dateLimit]);
+
+      // User & split growth
+      const growthStats = await pool.query(`
+        SELECT 
+          (SELECT COUNT(*) FROM users WHERE created_at >= $1) AS new_users,
+          (SELECT COUNT(*) FROM splits WHERE created_at >= $1) AS new_splits
+      `, [dateLimit]);
+
+      res.json({
+        timeframe,
+        payments: {
+          completed: parseInt(payStats.rows[0].completed_payments || 0),
+          failed: parseInt(payStats.rows[0].failed_payments || 0),
+          volume: Number(payStats.rows[0].total_volume || 0)
+        },
+        withdrawals: {
+          completed: parseInt(wthStats.rows[0].completed_withdrawals || 0),
+          pending: parseInt(wthStats.rows[0].pending_withdrawals || 0),
+          grossAmount: Number(wthStats.rows[0].gross_withdrawals || 0),
+          feeRevenue: Number(wthStats.rows[0].total_withdrawal_fees || 0),
+          netDisbursed: Number(wthStats.rows[0].net_payouts_disbursed || 0)
+        },
+        growth: {
+          newUsers: parseInt(growthStats.rows[0].new_users || 0),
+          newSplits: parseInt(growthStats.rows[0].new_splits || 0)
+        }
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -867,12 +1257,24 @@ export function createAdminRouter(pool) {
   router.get('/providers', requirePermission('providers.view'), async (req, res) => {
     try {
       const snippeConfigured = !!process.env.SNIPPE_API_KEY;
+      const { rows: caps } = await pool.query('SELECT * FROM provider_capabilities').catch(() => ({ rows: [] }));
+      const { rows: apps } = await pool.query('SELECT * FROM application_integrations').catch(() => ({ rows: [] }));
 
       res.json([
         {
-          name: 'Snippe',
+          name: 'Snippe.sh Mobile Money & Cards',
           status: snippeConfigured ? 'CONNECTED' : 'NOT_CONFIGURED',
           environment: process.env.NODE_ENV || 'production',
+          type: 'PAYMENT_GATEWAY',
+          capabilitiesCount: caps.length,
+          lastWebhook: new Date().toISOString()
+        },
+        {
+          name: 'Application Integrations Engine',
+          status: apps.length > 0 ? 'CONNECTED' : 'STANDALONE',
+          environment: process.env.NODE_ENV || 'production',
+          type: 'INTERNAL_ROUTER',
+          activeAppsCount: apps.filter(a => a.is_active).length,
           lastWebhook: new Date().toISOString()
         }
       ]);
@@ -882,16 +1284,29 @@ export function createAdminRouter(pool) {
   });
 
   router.get('/system', requirePermission('providers.view'), async (req, res) => {
+    const startDb = Date.now();
     try {
       const dbCheck = await pool.query('SELECT NOW()');
+      const latencyMs = Date.now() - startDb;
+      const mem = process.memoryUsage();
+
       res.json({
         application: 'HEALTHY',
         database: dbCheck.rows ? 'HEALTHY' : 'DEGRADED',
+        databaseLatencyMs: latencyMs,
+        dbLatencyMs: latencyMs,
+        memoryRssMb: Math.round(mem.rss / 1024 / 1024),
+        memoryHeapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
         webhookEngine: 'HEALTHY',
         uptimeSeconds: process.uptime()
       });
     } catch (err) {
-      res.status(500).json({ application: 'HEALTHY', database: 'DOWN', error: err.message });
+      res.status(500).json({
+        application: 'HEALTHY',
+        database: 'DOWN',
+        databaseLatencyMs: -1,
+        error: err.message
+      });
     }
   });
 
@@ -900,11 +1315,42 @@ export function createAdminRouter(pool) {
   // -------------------------------------------------------------
   router.get('/audit-logs', requirePermission('audit_logs.view'), async (req, res) => {
     try {
-      const { limit = 50, offset = 0 } = req.query;
-      const { rows } = await pool.query(
-        'SELECT * FROM admin_audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-        [parseInt(limit), parseInt(offset)]
-      );
+      const { limit = 50, offset = 0, query } = req.query;
+      let sql = 'SELECT * FROM admin_audit_logs WHERE 1=1';
+      const params = [];
+
+      if (query) {
+        params.push(`%${query}%`);
+        sql += ` AND (admin_email ILIKE $${params.length} OR action ILIKE $${params.length} OR resource_type ILIKE $${params.length})`;
+      }
+
+      sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+      params.push(parseInt(limit), parseInt(offset));
+
+      const { rows } = await pool.query(sql, params);
+
+      // If admin_audit_logs has 0 rows, check fallback audit_logs
+      if (rows.length === 0 && !query) {
+        const fallback = await pool.query(
+          `SELECT 
+            id,
+            'system@lumosplit.lumo.co.tz' AS admin_email,
+            action,
+            entity_type AS resource_type,
+            entity_id AS resource_id,
+            details AS after_state,
+            ip_address,
+            created_at
+          FROM audit_logs
+          ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+          [parseInt(limit), parseInt(offset)]
+        ).catch(() => ({ rows: [] }));
+
+        if (fallback.rows && fallback.rows.length > 0) {
+          return res.json(fallback.rows);
+        }
+      }
+
       res.json(rows);
     } catch (err) {
       res.status(500).json({ error: err.message });

@@ -52,6 +52,25 @@ async function runWithdrawalTests() {
     assert(calc.amountToReserve === 30000, 'Amount reserved is strictly 30,000 (never over-reserved or whole balance)');
     assert(calc.remainingAvailableBalance === 20000, 'Remaining available balance is strictly 20,000 (50,000 - 30,000)');
 
+    console.log('\n▶ [Test 1b] Enforcing 5,000 TZS Minimum Withdrawal Threshold');
+    let subMinimumBlocked = false;
+    try {
+      WithdrawalService.calculateWithdrawalFinancials(3000, 50000);
+    } catch (err) {
+      subMinimumBlocked = true;
+      assert(
+        err.message.includes('Minimum withdrawal request is 5,000 TZS. Please increase withdraw amount.'),
+        'Sub-5000 request rejects with exact error: "Minimum withdrawal request is 5,000 TZS. Please increase withdraw amount."'
+      );
+    }
+    assert(subMinimumBlocked, 'Withdrawal below TZS 5,000 was strictly rejected');
+
+    // Test exact minimum boundary (5,000 TZS)
+    const exactMin = WithdrawalService.calculateWithdrawalFinancials(5000, 10000);
+    assert(exactMin.requestedAmount === 5000, 'Exact minimum boundary of 5,000 TZS succeeds');
+    assert(exactMin.feeAmount === 250, 'Fee for 5,000 TZS is TZS 250 (5%)');
+    assert(exactMin.netPayout === 4750, 'Net payout for 5,000 TZS is TZS 4,750');
+
     // -------------------------------------------------------------
     // SETUP: Provision Test User A with exactly TZS 50,000
     // -------------------------------------------------------------

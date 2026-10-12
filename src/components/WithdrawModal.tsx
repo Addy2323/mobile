@@ -47,7 +47,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ availableBalance, 
 
   // Sync quotes with server if user pauses typing
   useEffect(() => {
-    if (numAmount < 1000 || numAmount > availableBalance) return;
+    if (numAmount < 5000 || numAmount > availableBalance) return;
     const timer = setTimeout(async () => {
       try {
         await fetchWithdrawalQuote(numAmount);
@@ -64,8 +64,8 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ availableBalance, 
       setError('Please enter a valid withdrawal amount.');
       return;
     }
-    if (numAmount < 1000) {
-      setError('Minimum withdrawal amount is TZS 1,000.');
+    if (numAmount < 5000) {
+      setError('Minimum withdrawal request is 5,000 TZS. Please increase withdraw amount.');
       return;
     }
     if (numAmount > availableBalance) {

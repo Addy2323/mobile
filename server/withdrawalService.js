@@ -3,7 +3,7 @@
 export const WITHDRAWAL_CONFIG = {
   version: '2026.1.0',
   currency: 'TZS',
-  minWithdrawalAmount: 1000, // Minimum withdrawal amount
+  minWithdrawalAmount: 5000, // Minimum withdrawal amount (5,000 TZS)
   maxWithdrawalAmount: 10000000, // Maximum single withdrawal amount (10M TZS)
   // Configured Tiered Fee Schedule
   feeTiers: [
@@ -46,7 +46,7 @@ export class WithdrawalService {
 
     if (numAmount < WITHDRAWAL_CONFIG.minWithdrawalAmount) {
       throw new Error(
-        `Withdrawal amount must be at least TZS ${WITHDRAWAL_CONFIG.minWithdrawalAmount.toLocaleString()}.`
+        'Minimum withdrawal request is 5,000 TZS. Please increase withdraw amount.'
       );
     }
 
