@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, ArrowLeft, Smartphone, Building2, CreditCard, CheckCircle2, AlertCircle, Clock, RefreshCw } from 'lucide-react';
 import TrustStrip from '@/components/TrustStrip';
+import FriendPaymentView from '@/views/FriendPaymentView';
 import { formatMoney } from '@/lib/utils';
 import { getTranslation, type Language } from '@/lib/i18n';
 
@@ -51,6 +52,7 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
   const [phone, setPhone] = useState('');
   const [countdown, setCountdown] = useState(45);
   const [txRef, setTxRef] = useState('');
+  const [isSplitLink, setIsSplitLink] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const t = (key: any) => getTranslation(key, language);
@@ -68,6 +70,10 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
       }
 
       const linkData: PublicPaymentData = await res.json();
+      if (linkData.type === 'SPLIT') {
+        setIsSplitLink(true);
+        return;
+      }
       setData(linkData);
       if (linkData.type === 'BIRTHDAY_POOL' || linkData.type === 'MCHANGO') {
         setCustomAmount('');
@@ -137,6 +143,10 @@ export const FriendPaymentScreen: React.FC<FriendPaymentScreenProps> = ({ token,
       setLoading(false);
     }
   };
+
+  if (isSplitLink) {
+    return <FriendPaymentView token={token} />;
+  }
 
   return (
     <div className="min-h-dvh bg-[#060D0E] text-white flex flex-col justify-between p-4 pb-safe no-tap-highlight max-w-[560px] mx-auto shadow-2xl">

@@ -7,6 +7,7 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { CreateSplitScreen } from '../screens/CreateSplitScreen';
 import { ScanScreen } from '../screens/ScanScreen';
 import { FriendPaymentScreen } from '../screens/FriendPaymentScreen';
+import FriendPaymentView from '@/views/FriendPaymentView';
 import { SplitStatusScreen } from '../screens/SplitStatusScreen';
 import { PayLinkScreen } from '../screens/PayLinkScreen';
 import { BirthdayScreen } from '../screens/BirthdayScreen';
@@ -44,12 +45,15 @@ export const MobileShell: React.FC = () => {
   // Handle /s/:token guest payment screen view
   if (activeView === 'friendPayment') {
     const token = window.location.pathname.replace('/s/', '') || 'BH7K2';
-    return (
+    const isGenericLink = /^(PL-|BDAY-|MCHANGO-|CH-|SAV-)/i.test(token);
+    return isGenericLink ? (
       <FriendPaymentScreen
         token={token}
         language={language}
         onBackToSplit={() => setActiveView('main')}
       />
+    ) : (
+      <FriendPaymentView token={token} />
     );
   }
 

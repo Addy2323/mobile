@@ -96,11 +96,14 @@ export default function App() {
   }, [authenticated]);
 
   if (publicToken) {
-    return (
+    const isGenericLink = /^(PL-|BDAY-|MCHANGO-|CH-|SAV-)/i.test(publicToken);
+    return isGenericLink ? (
       <FriendPaymentScreen
         token={publicToken}
         onBackToSplit={() => { window.location.href = '/'; }}
       />
+    ) : (
+      <FriendPaymentView token={publicToken} />
     );
   }
 

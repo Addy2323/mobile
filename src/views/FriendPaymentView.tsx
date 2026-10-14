@@ -15,6 +15,7 @@ import {
   paymentProviders, MockPaymentProvider, SnippePaymentProviderClient, generateIdempotencyKey,
 } from '@/lib/paymentProvider';
 import Logo from '@/components/Logo';
+import { FriendPaymentScreen } from '@/mobile/screens/FriendPaymentScreen';
 
 type Stage = 'choose' | 'loading' | 'not_found' | 'select' | 'processing' | 'confirming' | 'success' | 'failed' | 'timeout' | 'already_paid' | 'claim_submitted';
 
@@ -39,6 +40,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   const [claimSent, setClaimSent] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [lastPaidAmount, setLastPaidAmount] = useState<number | null>(null);
+  const [isGenericLink, setIsGenericLink] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -46,24 +48,59 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
   }, []);
 
   async function loadData() {
+    let s: Split | null = null;
+    let payers: Participant[] = [];
+
     const { data: splitData } = await supabase
       .from('splits')
       .select('*')
       .eq('ref_code', token.toUpperCase())
       .maybeSingle();
 
-    if (!splitData) {
+    if (splitData) {
+      s = splitData as Split;
+    } else {
       try {
         const pubRes = await fetch(`/api/public/payment-links/${encodeURIComponent(token)}`);
         if (pubRes.ok) {
-          window.location.reload();
-          return;
+          const pubData = await pubRes.json();
+          if (pubData.type === 'SPLIT') {
+            s = {
+              id: pubData.id,
+              title: pubData.title,
+              category: pubData.category || 'other',
+              currency: pubData.currency || 'TZS',
+              total_amount: Number(pubData.amount) || 0,
+              mode: pubData.mode || 'equal',
+              organizer_name: pubData.organizerName || 'Organizer',
+              organizer_phone: pubData.organizerPhone || '',
+              merchant_id: pubData.merchant_id || null,
+              status: pubData.status || 'ACTIVE',
+              due_at: null,
+              note: pubData.description || null,
+              settlement_percent: 0,
+              amount_paid: pubData.amount_paid || 0,
+              participant_count: pubData.participantCount || (pubData.participants?.length || 1),
+              ref_code: pubData.token || token,
+              created_at: pubData.created_at || new Date().toISOString(),
+            };
+            if (Array.isArray(pubData.participants)) {
+              payers = pubData.participants as Participant[];
+            }
+          } else {
+            setIsGenericLink(true);
+            return;
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.error('Failed to resolve link:', err);
+      }
+    }
+
+    if (!s) {
       setStage('not_found');
       return;
     }
-    const s = splitData as Split;
     setSplit(s);
 
     if (s.merchant_id) {
@@ -75,11 +112,13 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
       if (m) setMerchant(m as Merchant);
     }
 
-    const { data: plist } = await supabase
-      .from('split_participants')
-      .select('*')
-      .eq('split_id', s.id);
-    const payers = Array.isArray(plist) ? (plist as Participant[]) : [];
+    if (payers.length === 0) {
+      const { data: plist } = await supabase
+        .from('split_participants')
+        .select('*')
+        .eq('split_id', s.id);
+      payers = Array.isArray(plist) ? (plist as Participant[]) : [];
+    }
     setOthers(payers);
 
     const searchParams = new URLSearchParams(window.location.search);
@@ -228,9 +267,16 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     const idempotencyKey = generateIdempotencyKey();
     const providerClient = new SnippePaymentProviderClient();
 
+    let cleanPhone = phone.replace(/[^\d]/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '255' + cleanPhone.slice(1);
+    } else if (!cleanPhone.startsWith('255') && cleanPhone.length === 9) {
+      cleanPhone = '255' + cleanPhone;
+    }
+
     const result = await providerClient.initiatePayment({
       amount: payAmountNum,
-      phone,
+      phone: cleanPhone,
       provider,
       idempotencyKey,
       destinationRef: merchant?.destination_id || split.ref_code,
@@ -248,6 +294,7 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
 
     if (result.status === 'FAILED') {
       stopCountdown();
+      setError(result.failureMessage || 'Payment initiation failed. Please check your phone number and try again.');
       setStage('failed');
       return;
     }
@@ -287,6 +334,15 @@ export default function FriendPaymentView({ token }: FriendPaymentViewProps) {
     setStage('select');
     setPaymentResult(null);
     setError('');
+  }
+
+  if (isGenericLink) {
+    return (
+      <FriendPaymentScreen
+        token={token}
+        onBackToSplit={() => { window.location.href = '/'; }}
+      />
+    );
   }
 
   if (stage === 'choose') {

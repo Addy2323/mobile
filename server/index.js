@@ -1179,7 +1179,149 @@ app.post(['/api/public/payment-links/:token/pay', '/api/public/pay/:token/pay'],
       });
     }
 
-    // 2. Try birthday_pools table
+    // 2. Try splits table by ref_code
+    const splitRes = await client.query(
+      `SELECT s.*, row_to_json(m.*) AS merchant
+       FROM splits s
+       LEFT JOIN merchants m ON s.merchant_id = m.id
+       WHERE UPPER(s.ref_code) = UPPER($1) FOR UPDATE`,
+      [token]
+    );
+
+    if (splitRes.rows.length > 0) {
+      const split = splitRes.rows[0];
+
+      if (split.status === 'COMPLETED' || split.status === 'CANCELLED') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `This bill split is already ${split.status.toLowerCase()}.` });
+      }
+
+      let cleanPhone = (phone || '').replace(/[^\d]/g, '');
+      if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.slice(1);
+      else if (!cleanPhone.startsWith('255') && cleanPhone.length === 9) cleanPhone = '255' + cleanPhone;
+
+      // Find participant by phone
+      let pRes = await client.query(
+        `SELECT * FROM split_participants 
+         WHERE split_id = $1 AND (
+           phone = $2 OR phone = $3 OR phone = $4 OR 
+           (phone IS NOT NULL AND LENGTH(phone) >= 9 AND RIGHT(phone, 9) = RIGHT($2, 9))
+         )
+         LIMIT 1`,
+        [split.id, cleanPhone, '0' + cleanPhone.slice(3), phone]
+      );
+
+      let participant = pRes.rows[0];
+
+      // If not found by phone, try finding by name
+      if (!participant && finalPayerName && finalPayerName !== 'Contributor') {
+        const nameRes = await client.query(
+          `SELECT * FROM split_participants WHERE split_id = $1 AND UPPER(TRIM(name)) = UPPER(TRIM($2)) LIMIT 1`,
+          [split.id, finalPayerName]
+        );
+        if (nameRes.rows.length > 0) participant = nameRes.rows[0];
+      }
+
+      // If still not found, pick first pending non-organizer participant
+      if (!participant) {
+        const pendingRes = await client.query(
+          `SELECT * FROM split_participants WHERE split_id = $1 AND is_organizer = false AND status != 'PAID' ORDER BY created_at ASC LIMIT 1`,
+          [split.id]
+        );
+        if (pendingRes.rows.length > 0) {
+          participant = pendingRes.rows[0];
+          await client.query(
+            `UPDATE split_participants SET phone = COALESCE(phone, $1), name = CASE WHEN name LIKE 'Friend%' OR name = '' THEN $2 ELSE name END WHERE id = $3`,
+            [cleanPhone, finalPayerName, participant.id]
+          );
+        }
+      }
+
+      // If still no participant, create one
+      if (!participant) {
+        const eachShare = Math.round(Number(split.total_amount) / Math.max(1, split.participant_count || 2));
+        const newPRes = await client.query(
+          `INSERT INTO split_participants (split_id, name, phone, allocation_amount, amount_paid, status, is_organizer)
+           VALUES ($1, $2, $3, $4, 0, 'PENDING', false)
+           RETURNING *`,
+          [split.id, finalPayerName, cleanPhone, eachShare]
+        );
+        participant = newPRes.rows[0];
+      }
+
+      const amountToPay = Number(amount || participant.allocation_amount || Math.round(Number(split.total_amount) / Math.max(1, split.participant_count || 1)));
+      const internalPaymentId = `SPLIT-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const idemKey = SnippePaymentProvider.formatIdempotencyKey(req.body.idempotency_key || `pay_split_${participant.id.slice(0, 18)}_${Date.now()}`);
+
+      const appKey = req.body.application_key || req.headers['x-application-key'] || 'lumo-split';
+      const integration = await ApplicationIntegrationService.getIntegrationByKey(pool, appKey);
+
+      // Pre-create payment attempt
+      try {
+        await client.query(
+          `INSERT INTO payment_attempts (
+            split_participant_id, amount, provider, status, payment_method, 
+            idempotency_key, application_id, webhook_url_used, resource_type, resource_id, merchant_reference, requested_at
+          ) VALUES ($1, $2, 'SNIPPE', 'CREATED', 'mobile_money', $3, $4, $5, 'split', $6, $7, NOW())`,
+          [participant.id, amountToPay, idemKey, integration.applicationKey, integration.webhookUrl, split.id, internalPaymentId]
+        );
+      } catch (attErr) {
+        console.warn('[Pre-creation Attempt Notice]:', attErr.message);
+      }
+
+      // Initiate Snippe payment
+      let providerTxRef = internalPaymentId;
+      try {
+        const snippeResult = await SnippePaymentProvider.initiatePayment({
+          amount: amountToPay,
+          phone: cleanPhone,
+          currency: split.currency || 'TZS',
+          splitId: split.id,
+          participantId: participant.id,
+          participantName: finalPayerName,
+          idempotencyKey: idemKey,
+          webhookUrl: integration.webhookUrl,
+          applicationKey: integration.applicationKey,
+          resourceType: 'split',
+          resourceId: split.id,
+          internalPaymentId
+        });
+
+        if (snippeResult && snippeResult.status === 'FAILED') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: snippeResult.failureMessage || 'Payment initiation failed.' });
+        }
+
+        if (snippeResult && snippeResult.providerTxRef) {
+          providerTxRef = snippeResult.providerTxRef;
+        }
+
+        const newStatus = snippeResult?.status === 'SUCCESS' ? 'PROCESSING' : snippeResult?.status === 'FAILED' ? 'FAILED' : 'PENDING';
+
+        await client.query('UPDATE split_participants SET payment_ref = $1 WHERE id = $2', [providerTxRef, participant.id]);
+        await client.query(
+          `UPDATE payment_attempts
+           SET provider_tx_ref = $1, status = $2, updated_at = NOW()
+           WHERE idempotency_key = $3 OR merchant_reference = $4`,
+          [providerTxRef, newStatus, idemKey, internalPaymentId]
+        );
+      } catch (e) {
+        console.warn('[Snippe Split Payment Error]:', e.message);
+      }
+
+      await client.query('COMMIT');
+
+      return res.json({
+        success: true,
+        message: 'Payment initiated successfully.',
+        txRef: providerTxRef,
+        amountPaid: amountToPay,
+        participantId: participant.id,
+        destinationSnapshot: split.destination_snapshot || PaymentRoutingService.createSnapshot(null)
+      });
+    }
+
+    // 3. Try birthday_pools table
     const bdayRaw = token.replace(/^BDAY-/i, '');
     const bdayRes = await client.query(
       `SELECT * FROM birthday_pools 
